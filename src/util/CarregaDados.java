@@ -22,6 +22,8 @@ import modelo.Dia;
  */
 public class CarregaDados {
 
+    public static String[] SIGLAS = new String[]{"WEGE3", "NATU3", "SBSP3", "CIEL3", "CSNA3", "VIVT3", "GRND3", "JSLG3", "LREN3", "UGPA3"};
+    
     public static List<Dia> carregaDados(File file1, File file2) {
         List dias = carregaDados(file1);
         dias.addAll(carregaDados(file2));
@@ -31,8 +33,6 @@ public class CarregaDados {
     public static List<Dia> carregaDados(File file) {
         List dias = new ArrayList();
 
-        String siglas[] = new String[]{"WEGE3", "NATU3", "SBSP3", "CIEL3", "CSNA3", "VIVT3", "GRND3", "JSLG3", "LREN3", "UGPA3"};
-
         try {
             Scanner input;
 
@@ -41,8 +41,8 @@ public class CarregaDados {
 
             while (input.hasNextLine()) {
                 String line = input.nextLine();
-                String sigla = line.substring(12, 24);
-                if (Arrays.asList(siglas).contains(sigla.trim())) {
+                String sigla = line.substring(12, 24).trim();
+                if (Arrays.asList(SIGLAS).contains(sigla)) {
 
                     String empresa = line.substring(27, 39).trim();
                     LocalDate data = LocalDate.parse(line.substring(02, 10), DateTimeFormatter.BASIC_ISO_DATE);
