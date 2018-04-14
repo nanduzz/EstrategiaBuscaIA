@@ -30,4 +30,36 @@ public class Dia {
         this.precoMedio = precoMedio;
     }
 
+    public String getAcao() {
+        return acao;
+    }
+
+    public String getSigla() {
+        return sigla;
+    }
+
+    public LocalDate getData() {
+        return data;
+    }
+
+    public Double getValorAbertura() {
+        return valorAbertura;
+    }
+
+    public Double getValorFechamento() {
+        return valorFechamento;
+    }
+
+    public Double getPrecoMin() {
+        return precoMin;
+    }
+
+    public Double getPrecoMax() {
+        return precoMax;
+    }
+
+    public Double getPrecoMedio() {
+        return precoMedio;
+    }
+
 }
