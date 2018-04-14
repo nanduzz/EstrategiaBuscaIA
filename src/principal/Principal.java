@@ -23,12 +23,11 @@ public class Principal {
         List<Dia> periodo2014e2015 = CarregaDados.carregaDados(
                 new File("src\\util\\COTAHIST_A2014.TXT"),
                 new File("src\\util\\COTAHIST_A2015.TXT"));
-        System.out.println(periodo2014e2015.size());
         List<Dia> periodo2016 = CarregaDados.carregaDados(
                 new File("src\\util\\COTAHIST_A2016.TXT"));
 
         EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaVinicius();
-        // estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
+        estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
         estrategiaBuscaIA.recebeDadosTeste(periodo2016);
         estrategiaBuscaIA.aplicaEstrategiaBusca();
 

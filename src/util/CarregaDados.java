@@ -54,7 +54,7 @@ public class CarregaDados {
 
                     //Double nrNegocios = Double.valueOf(line.substring(147, 152));
                     //Double total = Double.valueOf(line.substring(152, 170));
-                    dias.add(new Dia(empresa, sigla, data, precoAbertura, precoFechamento, precoMin, precoMax, precoMedio, precoFechamento));
+                    dias.add(new Dia(empresa, sigla, data, precoAbertura, precoFechamento, precoMin, precoMax, precoMedio));
                 }
             }
             input.close();

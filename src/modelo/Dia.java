@@ -16,11 +16,10 @@ public class Dia {
     Double precoMin;
     Double precoMax;
     Double precoMedio;
-    Double valorFechamentoAjustado;
 
     public Dia(String acao, String sigla, LocalDate data, Double valorAbertura,
             Double valorFechamento, Double precoMin, Double precoMax,
-            Double precoMedio, Double valorFechamentoAjustado) {
+            Double precoMedio) {
         this.acao = acao;
         this.sigla = sigla;
         this.data = data;
@@ -29,7 +28,6 @@ public class Dia {
         this.precoMin = precoMin;
         this.precoMax = precoMax;
         this.precoMedio = precoMedio;
-        this.valorFechamentoAjustado = valorFechamentoAjustado;
     }
 
 }

@@ -12,41 +12,54 @@ import modelo.Dia;
  *
  * @author Camargo
  */
-public class EstrategiaBuscaVinicius implements EstrategiaBusca{
+public class EstrategiaBuscaVinicius implements EstrategiaBusca {
+
+    class Empresa{
+        String nome;
+        Integer nrDeAcoes;
+        Double valor;
+    }
+    
+    List<Dia> periodoTreino;
+    List<Dia> periodoTeste;
+    final Double CARTEIRA_INICIAL = 1000000D;
+    Double carteira = 0D;
 
     @Override
     public void recebeDadosTreino(List<Dia> periodo) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        periodoTreino = periodo;
     }
 
     @Override
     public void recebeDadosTeste(List<Dia> periodo) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        periodoTeste = periodo;
     }
 
     @Override
     public void aplicaEstrategiaBusca() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        
+        
+        System.out.println(periodoTeste.size());
     }
 
     @Override
     public Double devolveValorPorfolio() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return 0D;
     }
 
     @Override
     public String devolveResultadosMesAMes() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return "null";
     }
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return "null";
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return "null";
     }
-    
+
 }
