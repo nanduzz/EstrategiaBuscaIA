@@ -1,2 +1,5 @@
 /build/
 *.txt
+/src/util/COTAHIST_A2015.TXT
+/src/util/COTAHIST_A2014.TXT
+/src/util/COTAHIST_A2016.TXT
