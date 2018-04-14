@@ -9,6 +9,7 @@ import java.time.LocalDate;
 public class Dia {
 
     String acao;
+    String sigla;
     LocalDate data;
     Double valorAbertura;
     Double valorFechamento;
@@ -17,10 +18,11 @@ public class Dia {
     Double precoMedio;
     Double valorFechamentoAjustado;
 
-    public Dia(String acao, LocalDate data, Double valorAbertura,
+    public Dia(String acao, String sigla, LocalDate data, Double valorAbertura,
             Double valorFechamento, Double precoMin, Double precoMax,
             Double precoMedio, Double valorFechamentoAjustado) {
         this.acao = acao;
+        this.sigla = sigla;
         this.data = data;
         this.valorAbertura = valorAbertura;
         this.valorFechamento = valorFechamento;

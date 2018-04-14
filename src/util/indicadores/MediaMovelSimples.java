@@ -16,11 +16,9 @@ public class MediaMovelSimples implements Indicador {
     private final int diasLento;
 
     public MediaMovelSimples(double[] precos, int diasRapido, int diasLento) {
-
         this.precos = precos;
         this.diasRapido = diasRapido;
         this.diasLento = diasLento;
-
     }
 
     /**
