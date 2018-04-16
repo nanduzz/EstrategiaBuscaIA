@@ -22,14 +22,18 @@ import util.CarregaDados;
  */
 public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
-    private LocalDate diaAtual = LocalDate.of(2016, Month.JANUARY, 28);
+    //variaveis de entrada
     private Map<Month, Mes> periodoTreino;
     private Map<Month, Mes> periodoTeste;
-    private final Double CARTEIRA_INICIAL = 1000000D;
+
+    //variveis que controlam dados financeiros
+    private final Double CARTEIRA_INICIAL = 100000D;
     private final Map<String, Empresa> portfolio = new HashMap<>();
     private Double carteira = CARTEIRA_INICIAL;
-    private final int RESFRIAMENTO = 1;
-    int temperatura = 365;
+
+    //variaveis que controlam ciclo de execucao
+    private LocalDate diaAtual = LocalDate.of(2016, Month.JANUARY, 28);
+    private int diasRestantes = 365;
 
     @Override
     public void recebeDadosTreino(List<Dia> periodo) {
@@ -59,15 +63,17 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     private void inicializaEmpresas() {
         periodoTeste.get(diaAtual.getMonth()).dias.forEach((dia) -> {
-            portfolio.put(dia.getSigla(), new Empresa(dia.getSigla(), dia.getAcao(), 0, 0D, 0D));
+            portfolio.put(dia.getSigla(), new Empresa(dia.getSigla(), dia.getAcao(), 0L, 0D, 0D));
         });
     }
 
     @Override
-    public Double devolveValorPorfolio() {
-        return Collections.max(portfolio.values(),
-                (Empresa e1, Empresa e2) -> e1.valorGerado.compareTo(e2.valorGerado))
-                .valorGerado;
+    public Double devolveValorPortfolio() {
+        double percentualAcumulado = 0;
+        for (Empresa empresa : portfolio.values()) {
+            percentualAcumulado += empresa.percentualGerado;
+        }
+        return percentualAcumulado + 1;
     }
 
     @Override
@@ -77,75 +83,37 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        return "";
+        return String.valueOf(Collections.max(portfolio.values()).percentualGerado);
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        return "";
+        return String.valueOf(Collections.min(portfolio.values()).percentualGerado);
     }
 
     @Override
     public void aplicaEstrategiaBusca() {
         inicializaEmpresas();
-        calculaExpectativaDeMercadoDiaria();
-        while (temperatura > 1) {
+        while (diasRestantes > 1) {
             calculaExpectativaDeMercadoDiaria();
-            temperatura -= RESFRIAMENTO;
+            investe();
             avancaDia();
-
         }
-        /*
-        // Loop until system has cooled
-        while (temp > 1) {
-            // Create new neighbour tour
-            Tour newSolution = new Tour(currentSolution.getTour());
-
-            // Get a random positions in the tour
-            int tourPos1 = (int) (newSolution.tourSize() * Math.random());
-            int tourPos2 = (int) (newSolution.tourSize() * Math.random());
-
-            // Get the cities at selected positions in the tour
-            City citySwap1 = newSolution.getCity(tourPos1);
-            City citySwap2 = newSolution.getCity(tourPos2);
-
-            // Swap them
-            newSolution.setCity(tourPos2, citySwap1);
-            newSolution.setCity(tourPos1, citySwap2);
-
-            // Get energy of solutions
-            int currentEnergy = currentSolution.getDistance();
-            int neighbourEnergy = newSolution.getDistance();
-
-            // Decide if we should accept the neighbour
-            if (acceptanceProbability(currentEnergy, neighbourEnergy, temp) > Math.random()) {
-                currentSolution = new Tour(newSolution.getTour());
-            }
-
-            // Keep track of the best solution found
-            if (currentSolution.getDistance() < best.getDistance()) {
-                best = new Tour(currentSolution.getTour());
-            }
-
-            // Cool system
-            temp *= 1 - coolingRate;
-            
-        }
-
-        System.out.println("Final solution distance: " + best.getDistance());
-        System.out.println("Tour: " + best);
-         */
+        gastaTudo();
     }
 
     private void calculaExpectativaDeMercadoDiaria() {
         for (String empresa : CarregaDados.SIGLAS) {
-            portfolio.get(empresa).expectativaLucroVenda = portfolio.get(empresa).expectativaLucroVenda + calculaRSI(empresa) / 2;
+            boolean TESTE = false;
+            boolean TREINO = true;
+            portfolio.get(empresa).expectativaPrecoAlto
+                    = (calculaRSI(empresa, TREINO) + calculaRSI(empresa, TESTE) * 2) / 3;
         }
     }
 
-    private double calculaRSI(String sigla) {
+    private double calculaRSI(String sigla, boolean treino) {
         List<Double> precos = new ArrayList<>();
-        Mes mesTreino = periodoTreino.get(diaAtual.getMonth());
+        Mes mesTreino = treino ? periodoTreino.get(diaAtual.getMonth()) : periodoTreino.get(diaAtual.getMonth());
 
         mesTreino.dias.stream()
                 .filter((dia) -> (dia.getSigla().equals(sigla)))
@@ -176,8 +144,71 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
         return rsi / 100;
     }
 
+    private void investe() {
+        for (Empresa empresa : portfolio.values()) {
+            if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > 0.7) {
+                double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
+                carteira += valorVenda;
+                empresa.nrDeAcoes = 0L;
+                empresa.valorGerado += valorVenda;
+            } else if (empresa.expectativaPrecoAlto < 0.3) {
+                double porcentagemMaximaCompra = calculaPorcentagemMaxima();
+                double valorAcao = achaPrecoAcao(empresa);
+                int nrAcoesCompradas = 0;
+                if (valorAcao != 0) {
+                    nrAcoesCompradas = (int) ((carteira * porcentagemMaximaCompra) / valorAcao);
+                }
+
+                double valorGasto = nrAcoesCompradas * valorAcao;
+                carteira -= valorGasto;
+                empresa.nrDeAcoes += nrAcoesCompradas;
+                empresa.valorGerado -= valorGasto;
+            }
+        }
+    }
+
+    private double calculaPorcentagemMaxima() {
+        double porcentagemMaximaCompra;
+        if (diasRestantes > 300) {
+            porcentagemMaximaCompra = 0.3;
+        } else if (diasRestantes > 250) {
+            porcentagemMaximaCompra = 0.45;
+        } else if (diasRestantes > 200) {
+            porcentagemMaximaCompra = 0.60;
+        } else if (diasRestantes > 150) {
+            porcentagemMaximaCompra = 0.75;
+        } else if (diasRestantes > 100) {
+            porcentagemMaximaCompra = 0.9;
+        } else {
+            porcentagemMaximaCompra = 1;
+        }
+        return porcentagemMaximaCompra;
+    }
+
+    private void gastaTudo() {
+        for (Empresa empresa : portfolio.values()) {
+            double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
+            carteira += valorVenda;
+            empresa.nrDeAcoes = 0L;
+            empresa.valorGerado += valorVenda;
+            empresa.percentualGerado = empresa.valorGerado / CARTEIRA_INICIAL;
+        }
+    }
+
+    private double achaPrecoAcao(Empresa empresa) {
+        double precoAcao = 0D;
+        for (Dia dia : periodoTreino.get(diaAtual.getMonth()).dias) {
+            if (diaAtual.getDayOfMonth() == dia.getData().getDayOfMonth()
+                    && dia.getSigla().equals(empresa.id)) {
+                precoAcao = dia.getValorFechamento();
+            }
+        }
+        return precoAcao;
+    }
+
     private void avancaDia() {
-        diaAtual = diaAtual.plusDays(RESFRIAMENTO);
+        diasRestantes -= 1;
+        diaAtual = diaAtual.plusDays(1);
     }
 
     private static class Mes {
@@ -191,20 +222,27 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
         }
     }
 
-    private class Empresa {
+    private class Empresa implements Comparable<Empresa> {
+
+        @Override
+        public int compareTo(Empresa o) {
+            return this.valorGerado.compareTo(o.valorGerado);
+        }
 
         String id;
         String nome;
-        Integer nrDeAcoes;
+        Long nrDeAcoes;
         Double valorGerado;
-        Double expectativaLucroVenda;
+        Double percentualGerado;
+        Double expectativaPrecoAlto;
 
-        public Empresa(String id, String nome, Integer nrDeAcoes, Double valorGerado, Double expectativaLucroVenda) {
+        public Empresa(String id, String nome,
+                Long nrDeAcoes, Double valorGerado, Double expectativaPrecoAlto) {
             this.id = id;
             this.nome = nome;
             this.nrDeAcoes = nrDeAcoes;
             this.valorGerado = valorGerado;
-            this.expectativaLucroVenda = expectativaLucroVenda;
+            this.expectativaPrecoAlto = expectativaPrecoAlto;
         }
 
         @Override

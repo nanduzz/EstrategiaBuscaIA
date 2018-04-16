@@ -31,7 +31,7 @@ public class Principal {
         estrategiaBuscaIA.recebeDadosTeste(periodo2016);
         estrategiaBuscaIA.aplicaEstrategiaBusca();
 
-        System.out.println(estrategiaBuscaIA.devolveValorPorfolio());
+        System.out.println(estrategiaBuscaIA.devolveValorPortfolio());
         System.out.println(estrategiaBuscaIA.devolveResultadosMesAMes());
         System.out.println(estrategiaBuscaIA.devolveAcaoMaiorGanho());
         System.out.println(estrategiaBuscaIA.devolveAcaoMaiorPrejuizo());
