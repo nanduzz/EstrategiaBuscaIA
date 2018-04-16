@@ -8,7 +8,6 @@ package estrategias;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,8 +67,8 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     }
 
     @Override
-    public Double devolveValorPortfolio() {
-        return carteira / CARTEIRA_INICIAL;
+    public String devolveValorPortfolio() {
+        return String.valueOf("Carteira obteve " + Math.floor(((carteira / CARTEIRA_INICIAL) * 100) * 100) / 100 + "% do valor investido.");
     }
 
     @Override
@@ -79,12 +78,36 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        return String.valueOf(Collections.max(portfolio.values()).valorFinal);
+        double maiorGanho = Double.MIN_VALUE;
+        Empresa melhorEmpresa = null;
+        for (Empresa empresa : portfolio.values()) {
+            if (empresa.investimento != 0) {
+                if (empresa.receita / empresa.investimento > maiorGanho) {
+                    maiorGanho = empresa.receita / empresa.investimento;
+                    melhorEmpresa = empresa;
+                }
+            }
+        }
+        return String.valueOf("Empresa " + melhorEmpresa.nome + " obteve "
+                + Math.floor((maiorGanho * 100) * 100) / 100 + "% do valor investido.");
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        return String.valueOf(Collections.min(portfolio.values()).valorFinal);
+        double menorGanho = Double.MAX_VALUE;
+        Empresa piorEmpresa = null;
+        for (Empresa empresa : portfolio.values()) {
+            if (empresa.investimento != 0) {
+                if (empresa.receita / empresa.investimento < menorGanho) {
+                    menorGanho = empresa.receita / empresa.investimento;
+                    piorEmpresa = empresa;
+                }
+            }
+        }
+
+        return String.valueOf("Empresa " + piorEmpresa.nome + " obteve "
+                + Math.floor((menorGanho * 100) * 100) / 100 + "% do valor investido."
+        );
     }
 
     @Override
@@ -181,7 +204,6 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
             carteira += valorVenda;
             empresa.nrDeAcoes = 0L;
             empresa.receita += valorVenda;
-            empresa.valorFinal = empresa.receita - empresa.investimento;
         }
     }
 
@@ -224,7 +246,6 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
         Long nrDeAcoes = 0L;
         Double receita = 0D;
         Double investimento = 0D;
-        Double valorFinal = 0D;
         Double expectativaPrecoAlto;
 
         public Empresa(String id, String nome) {
