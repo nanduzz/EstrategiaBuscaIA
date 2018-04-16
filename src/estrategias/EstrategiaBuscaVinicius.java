@@ -63,17 +63,13 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     private void inicializaEmpresas() {
         periodoTeste.get(diaAtual.getMonth()).dias.forEach((dia) -> {
-            portfolio.put(dia.getSigla(), new Empresa(dia.getSigla(), dia.getAcao(), 0L, 0D, 0D));
+            portfolio.put(dia.getSigla(), new Empresa(dia.getSigla(), dia.getAcao()));
         });
     }
 
     @Override
     public Double devolveValorPortfolio() {
-        double percentualAcumulado = 0;
-        for (Empresa empresa : portfolio.values()) {
-            percentualAcumulado += empresa.percentualGerado;
-        }
-        return percentualAcumulado + 1;
+        return carteira / CARTEIRA_INICIAL;
     }
 
     @Override
@@ -83,12 +79,12 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        return String.valueOf(Collections.max(portfolio.values()).percentualGerado);
+        return String.valueOf(Collections.max(portfolio.values()).valorFinal);
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        return String.valueOf(Collections.min(portfolio.values()).percentualGerado);
+        return String.valueOf(Collections.min(portfolio.values()).valorFinal);
     }
 
     @Override
@@ -146,12 +142,12 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     private void investe() {
         for (Empresa empresa : portfolio.values()) {
-            if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > 0.7) {
+            if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > 0.5) {
                 double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
                 carteira += valorVenda;
                 empresa.nrDeAcoes = 0L;
-                empresa.valorGerado += valorVenda;
-            } else if (empresa.expectativaPrecoAlto < 0.3) {
+                empresa.receita += valorVenda;
+            } else if (empresa.expectativaPrecoAlto < 0.2) {
                 double porcentagemMaximaCompra = calculaPorcentagemMaxima();
                 double valorAcao = achaPrecoAcao(empresa);
                 int nrAcoesCompradas = 0;
@@ -162,7 +158,7 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
                 double valorGasto = nrAcoesCompradas * valorAcao;
                 carteira -= valorGasto;
                 empresa.nrDeAcoes += nrAcoesCompradas;
-                empresa.valorGerado -= valorGasto;
+                empresa.investimento += valorGasto;
             }
         }
     }
@@ -170,15 +166,9 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     private double calculaPorcentagemMaxima() {
         double porcentagemMaximaCompra;
         if (diasRestantes > 300) {
-            porcentagemMaximaCompra = 0.3;
-        } else if (diasRestantes > 250) {
-            porcentagemMaximaCompra = 0.45;
-        } else if (diasRestantes > 200) {
-            porcentagemMaximaCompra = 0.60;
-        } else if (diasRestantes > 150) {
-            porcentagemMaximaCompra = 0.75;
+            porcentagemMaximaCompra = 0.4;
         } else if (diasRestantes > 100) {
-            porcentagemMaximaCompra = 0.9;
+            porcentagemMaximaCompra = 0.8;
         } else {
             porcentagemMaximaCompra = 1;
         }
@@ -190,8 +180,8 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
             double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
             carteira += valorVenda;
             empresa.nrDeAcoes = 0L;
-            empresa.valorGerado += valorVenda;
-            empresa.percentualGerado = empresa.valorGerado / CARTEIRA_INICIAL;
+            empresa.receita += valorVenda;
+            empresa.valorFinal = empresa.receita - empresa.investimento;
         }
     }
 
@@ -226,23 +216,21 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
         @Override
         public int compareTo(Empresa o) {
-            return this.valorGerado.compareTo(o.valorGerado);
+            return this.receita.compareTo(o.receita);
         }
 
         String id;
         String nome;
-        Long nrDeAcoes;
-        Double valorGerado;
-        Double percentualGerado;
+        Long nrDeAcoes = 0L;
+        Double receita = 0D;
+        Double investimento = 0D;
+        Double valorFinal = 0D;
         Double expectativaPrecoAlto;
 
-        public Empresa(String id, String nome,
-                Long nrDeAcoes, Double valorGerado, Double expectativaPrecoAlto) {
+        public Empresa(String id, String nome) {
             this.id = id;
             this.nome = nome;
-            this.nrDeAcoes = nrDeAcoes;
-            this.valorGerado = valorGerado;
-            this.expectativaPrecoAlto = expectativaPrecoAlto;
+
         }
 
         @Override
