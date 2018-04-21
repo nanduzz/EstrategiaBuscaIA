@@ -30,9 +30,19 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     private final Map<String, Empresa> portfolio = new HashMap<>();
     private Double carteira = CARTEIRA_INICIAL;
 
+    //parametros do problema
+    private final int PESO_TREINO = 1;
+    private final int PESO_TESTE = 4;
+    private final int SOMA_PESOS = PESO_TESTE + PESO_TREINO;
+    private static final int ULTIMO_DIA_MES = 29;
+    private final double EXPECTATIVA_DE_ALTA_PARA_VENDER = 0.5;
+    private final double EXPECTATIVA_DE_ALTA_PARA_COMPRAR = 0.3;
+
     //variaveis que controlam ciclo de execucao
-    private LocalDate diaAtual = LocalDate.of(2016, Month.JANUARY, 28);
+    private LocalDate diaAtual = LocalDate.of(2016, Month.JANUARY, 1);
     private int diasRestantes = 365;
+
+    private final StringBuilder relatorio = new StringBuilder();
 
     @Override
     public void recebeDadosTreino(List<Dia> periodo) {
@@ -68,12 +78,14 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     @Override
     public String devolveValorPortfolio() {
-        return String.valueOf("Carteira obteve " + Math.floor(((carteira / CARTEIRA_INICIAL) * 100) * 100) / 100 + "% do valor investido.");
+        return String.valueOf("\nCarteira obteve "
+                + Math.floor(((carteira / CARTEIRA_INICIAL) * 100) * 100) / 100
+                + "% do valor investido.\n");
     }
 
     @Override
     public String devolveResultadosMesAMes() {
-        return "";
+        return relatorio.toString();
     }
 
     @Override
@@ -87,6 +99,9 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
                     melhorEmpresa = empresa;
                 }
             }
+        }
+        if (melhorEmpresa == null) {
+            return "Nao houve ganho no periodo";
         }
         return String.valueOf("Empresa " + melhorEmpresa.nome + " obteve "
                 + Math.floor((maiorGanho * 100) * 100) / 100 + "% do valor investido.");
@@ -104,6 +119,9 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
                 }
             }
         }
+        if (piorEmpresa == null) {
+            return "Nao houve prejuizo no periodo";
+        }
 
         return String.valueOf("Empresa " + piorEmpresa.nome + " obteve "
                 + Math.floor((menorGanho * 100) * 100) / 100 + "% do valor investido."
@@ -117,6 +135,9 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
             calculaExpectativaDeMercadoDiaria();
             investe();
             avancaDia();
+            if (diaAtual.getDayOfMonth() == ULTIMO_DIA_MES) {
+                geraResultadoMes();
+            }
         }
         gastaTudo();
     }
@@ -126,13 +147,13 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
             boolean TESTE = false;
             boolean TREINO = true;
             portfolio.get(empresa).expectativaPrecoAlto
-                    = (calculaRSI(empresa, TREINO) + calculaRSI(empresa, TESTE) * 2) / 3;
+                    = (calculaRSI(empresa, TREINO) * PESO_TREINO + calculaRSI(empresa, TESTE) * PESO_TESTE) / SOMA_PESOS;
         }
     }
 
     private double calculaRSI(String sigla, boolean treino) {
         List<Double> precos = new ArrayList<>();
-        Mes mesTreino = treino ? periodoTreino.get(diaAtual.getMonth()) : periodoTreino.get(diaAtual.getMonth());
+        Mes mesTreino = treino ? periodoTreino.get(diaAtual.getMonth()) : periodoTeste.get(diaAtual.getMonth());
 
         mesTreino.dias.stream()
                 .filter((dia) -> (dia.getSigla().equals(sigla)))
@@ -164,13 +185,13 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     }
 
     private void investe() {
-        for (Empresa empresa : portfolio.values()) {
-            if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > 0.5) {
+        portfolio.values().forEach((empresa) -> {
+            if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > EXPECTATIVA_DE_ALTA_PARA_VENDER) {
                 double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
                 carteira += valorVenda;
                 empresa.nrDeAcoes = 0L;
                 empresa.receita += valorVenda;
-            } else if (empresa.expectativaPrecoAlto < 0.2) {
+            } else if (empresa.expectativaPrecoAlto < EXPECTATIVA_DE_ALTA_PARA_COMPRAR) {
                 double porcentagemMaximaCompra = calculaPorcentagemMaxima();
                 double valorAcao = achaPrecoAcao(empresa);
                 int nrAcoesCompradas = 0;
@@ -183,7 +204,7 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
                 empresa.nrDeAcoes += nrAcoesCompradas;
                 empresa.investimento += valorGasto;
             }
-        }
+        });
     }
 
     private double calculaPorcentagemMaxima() {
@@ -199,17 +220,26 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     }
 
     private void gastaTudo() {
-        for (Empresa empresa : portfolio.values()) {
+        portfolio.values().forEach((empresa) -> {
             double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
             carteira += valorVenda;
             empresa.nrDeAcoes = 0L;
             empresa.receita += valorVenda;
+        });
+    }
+
+    private double gastaTudoComCarteiraFalsa() {
+        double carteiraFalsa = carteira;
+        for (Empresa empresa : portfolio.values()) {
+            double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
+            carteiraFalsa += valorVenda;
         }
+        return carteiraFalsa;
     }
 
     private double achaPrecoAcao(Empresa empresa) {
         double precoAcao = 0D;
-        for (Dia dia : periodoTreino.get(diaAtual.getMonth()).dias) {
+        for (Dia dia : periodoTeste.get(diaAtual.getMonth()).dias) {
             if (diaAtual.getDayOfMonth() == dia.getData().getDayOfMonth()
                     && dia.getSigla().equals(empresa.id)) {
                 precoAcao = dia.getValorFechamento();
@@ -221,6 +251,18 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     private void avancaDia() {
         diasRestantes -= 1;
         diaAtual = diaAtual.plusDays(1);
+    }
+
+    private void geraResultadoMes() {
+        relatorio.append("Mes: ").append(diaAtual.getMonth().name()).append("\n");
+        relatorio.append("Carteira obteve ")
+                .append(
+                        Math.floor(
+                                ((gastaTudoComCarteiraFalsa() / CARTEIRA_INICIAL) * 100) * 100) / 100)
+                .append("% do valor investido." + "\n");
+        relatorio.append(devolveAcaoMaiorGanho()).append("\n");
+        relatorio.append(devolveAcaoMaiorPrejuizo()).append("\n");
+        relatorio.append("-----------------------------------------\n");
     }
 
     private static class Mes {
