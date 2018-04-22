@@ -40,7 +40,8 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     //variaveis que controlam ciclo de execucao
     private LocalDate diaAtual = LocalDate.of(2016, Month.JANUARY, 1);
-    private int diasRestantes = 365;
+    private final int DIAS_2016 = 366;
+    private int diasRestantes = DIAS_2016;
 
     private final StringBuilder relatorio = new StringBuilder();
 
@@ -187,18 +188,17 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     private void investe() {
         portfolio.values().forEach((empresa) -> {
             if (empresa.nrDeAcoes > 0 && empresa.expectativaPrecoAlto > EXPECTATIVA_DE_ALTA_PARA_VENDER) {
-                double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
+                double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa, diaAtual);
                 carteira += valorVenda;
                 empresa.nrDeAcoes = 0L;
                 empresa.receita += valorVenda;
             } else if (empresa.expectativaPrecoAlto < EXPECTATIVA_DE_ALTA_PARA_COMPRAR) {
                 double porcentagemMaximaCompra = calculaPorcentagemMaxima();
-                double valorAcao = achaPrecoAcao(empresa);
+                double valorAcao = achaPrecoAcao(empresa, diaAtual);
                 int nrAcoesCompradas = 0;
                 if (valorAcao != 0) {
                     nrAcoesCompradas = (int) ((carteira * porcentagemMaximaCompra) / valorAcao);
                 }
-
                 double valorGasto = nrAcoesCompradas * valorAcao;
                 carteira -= valorGasto;
                 empresa.nrDeAcoes += nrAcoesCompradas;
@@ -208,41 +208,41 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     }
 
     private double calculaPorcentagemMaxima() {
-        double porcentagemMaximaCompra;
-        if (diasRestantes > 300) {
-            porcentagemMaximaCompra = 0.4;
-        } else if (diasRestantes > 100) {
-            porcentagemMaximaCompra = 0.8;
-        } else {
-            porcentagemMaximaCompra = 1;
-        }
-        return porcentagemMaximaCompra;
+        //return 1 - (diasRestantes / (float) DIAS_2016);
+        return 1;
     }
 
     private void gastaTudo() {
         portfolio.values().forEach((empresa) -> {
-            double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
-            carteira += valorVenda;
-            empresa.nrDeAcoes = 0L;
-            empresa.receita += valorVenda;
+            if (empresa.nrDeAcoes > 0) {
+                double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa, diaAtual);
+                carteira += valorVenda;
+                empresa.nrDeAcoes = 0L;
+                empresa.receita += valorVenda;
+            }
         });
     }
 
     private double gastaTudoComCarteiraFalsa() {
         double carteiraFalsa = carteira;
         for (Empresa empresa : portfolio.values()) {
-            double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa);
+            double valorVenda = empresa.nrDeAcoes * achaPrecoAcao(empresa, diaAtual);
             carteiraFalsa += valorVenda;
         }
         return carteiraFalsa;
     }
 
-    private double achaPrecoAcao(Empresa empresa) {
+    private double achaPrecoAcao(Empresa empresa, LocalDate diaAtual) {
         double precoAcao = 0D;
         for (Dia dia : periodoTeste.get(diaAtual.getMonth()).dias) {
             if (diaAtual.getDayOfMonth() == dia.getData().getDayOfMonth()
                     && dia.getSigla().equals(empresa.id)) {
                 precoAcao = dia.getValorFechamento();
+            }
+        }
+        if (precoAcao == 0) {
+            if (diaAtual.getDayOfYear() > 1) {
+                return achaPrecoAcao(empresa, diaAtual.minusDays(1));
             }
         }
         return precoAcao;
