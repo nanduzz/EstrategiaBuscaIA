@@ -17,12 +17,9 @@ import util.indicadores.RSI;
 
 /**
  *
- * 
- * FALTA ELITISMO
- * RODAR AS GERAÇÕeS
- * MUTAÇÔES
- * MELHROAR A QUANTIDADE DE GENES 
- *  ---- % de investimento por empresa podem ser 10 genes
+ *
+ * FALTA ELITISMO RODAR AS GERAÇÕeS MUTAÇÔES MELHROAR A QUANTIDADE DE GENES ----
+ * % de investimento por empresa podem ser 10 genes
  *
  * @author fernando
  */
@@ -38,29 +35,30 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
 
     @Override
     public void recebeDadosTreino(List<Dia> periodo) {
-        for (Dia d : periodo) {
+        periodo.forEach((Dia d) -> {
             this.diasTreino.add(d.getData().toString());
             if (!empresaDiasTreino.containsKey(d.getData().toString())) {
                 empresaDiasTreino.put(d.getData().toString(), new ArrayList<>());
             }
             empresaDiasTreino.get(d.getData().toString()).add(d);
-        }
+        });
+
     }
 
     @Override
     public void recebeDadosTeste(List<Dia> periodo) {
-        for (Dia d : periodo) {
+        periodo.forEach((Dia d) -> {
             this.diasTeste.add(d.getData().toString());
             if (!empresaDiasTeste.containsKey(d.getData().toString())) {
                 empresaDiasTeste.put(d.getData().toString(), new ArrayList<>());
             }
             empresaDiasTeste.get(d.getData().toString()).add(d);
-        }
+        });
     }
 
     @Override
     public void aplicaEstrategiaBusca() {
-        for (int i = 0; i < 100000; i++) {
+        for (int i = 0; i < 10000; i++) {
             MembroPopulacao membroPopulacao = new MembroPopulacao();
             membroPopulacao.geraGenesAleatorios();
 
@@ -79,7 +77,7 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
         int i = 0;
         for (MembroPopulacao m : populacao) {
             System.out.println(m.getValorCaixaFinal());
-            if(i > 5){
+            if (i > 5) {
                 break;
             }
             i++;
@@ -102,10 +100,13 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
                 }
 
 //                double roc = new ROC(this.diasPassados.get(diaEmpresa.getSigla()), 5).calcula();
-                double rsi = new RSI(this.diasPassados.get(sigla), membroPopulacao.getPeriodoCalculoRSI()).calcula();
+                double rsi = new RSI(this.diasPassados.get(sigla), (int) membroPopulacao.getPeriodoCalculoRSI()).calcula();
 
                 if (rsi > 0 && rsi < membroPopulacao.getRSIMin() && !portifolio.possuiAcao(sigla)) {
-                    portifolio.compraAcao(sigla, membroPopulacao.getQuantidadeCompra(), this.getUltimoValorFechamento(sigla));
+
+                    double quantidadeAcoes = (membroPopulacao.getPorcentagemInvestimento(sigla) * portifolio.getValorEmCaixa()) / this.getUltimoValorFechamento(sigla);
+                    int quantidadeCompra = (int) Math.floor(quantidadeAcoes);
+                    portifolio.compraAcao(sigla, quantidadeCompra, this.getUltimoValorFechamento(sigla));
                 } else if (rsi > membroPopulacao.getRSIMax() && portifolio.possuiAcao(sigla)) {
                     portifolio.vendeAcao(sigla, this.getUltimoValorFechamento(sigla));
                 }
@@ -114,6 +115,7 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
             }
         }
 
+        
         //vende todas as ações para calcular valor em caixa
         for (String sigla : this.diasPassados.keySet()) {
             portifolio.vendeAcao(sigla, this.diasPassados.get(sigla).get(this.diasPassados.size() - 1));
@@ -225,12 +227,11 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
 
     class MembroPopulacao {
 
-        private static final int I_RSI_MIN = 0;
-        private static final int I_RSI_MAX = 1;
-        private static final int I_QUANTIDADE_COMPRA = 2;
-        private static final int I_PERIODO_RSI = 3;
+        private static final int I_RSI_MIN = 10;
+        private static final int I_RSI_MAX = 11;
+        private static final int I_PERIODO_RSI = 12;
 
-        private int[] genes = new int[4];
+        private double[] genes = new double[13];
 
         private double valorCaixaFinal = 0;
 
@@ -241,25 +242,29 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
             if (this.genes[I_RSI_MAX] <= this.genes[I_RSI_MIN]) {
                 this.geraGenesAleatorios();
             }
-            this.genes[I_PERIODO_RSI] = ThreadLocalRandom.current().nextInt(2,20 + 1);
-            this.genes[I_QUANTIDADE_COMPRA] = rand.nextInt(1000);
+            this.genes[I_PERIODO_RSI] = ThreadLocalRandom.current().nextInt(2, 20 + 1);
+
+            //Inicia a quantidade a ser investida por empresas do ENUM
+            for (int i = 0; i < 10; i++) {
+                this.genes[i] = rand.nextDouble() / 10;
+            }
 
         }
 
-        public int getRSIMin() {
+        public double getRSIMin() {
             return this.genes[I_RSI_MIN];
         }
 
-        public int getRSIMax() {
+        public double getRSIMax() {
             return this.genes[I_RSI_MAX];
         }
 
-        public int getQuantidadeCompra() {
-            return this.genes[I_QUANTIDADE_COMPRA];
+        public double getPeriodoCalculoRSI() {
+            return this.genes[I_PERIODO_RSI];
         }
 
-        public int getPeriodoCalculoRSI() {
-            return this.genes[I_PERIODO_RSI];
+        public double getPorcentagemInvestimento(String sigla) {
+            return this.genes[Empresas.valueOf(sigla).ordinal()];
         }
 
         private void setValorFinal(double valorEmCaixa) {
@@ -270,6 +275,19 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
             return valorCaixaFinal;
         }
 
+    }
+
+    enum Empresas {
+        WEGE3,
+        NATU3,
+        SBSP3,
+        CIEL3,
+        CSNA3,
+        VIVT3,
+        GRND3,
+        JSLG3,
+        LREN3,
+        UGPA3;
     }
 
 }
