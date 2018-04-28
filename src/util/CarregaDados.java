@@ -46,11 +46,11 @@ public class CarregaDados {
 
                     String empresa = line.substring(27, 39).trim();
                     LocalDate data = LocalDate.parse(line.substring(02, 10), DateTimeFormatter.BASIC_ISO_DATE);
-                    Double precoAbertura = Double.valueOf(line.substring(56, 69));
-                    Double precoMax = Double.valueOf(line.substring(69, 82));
-                    Double precoMin = Double.valueOf(line.substring(82, 95));
-                    Double precoMedio = Double.valueOf(line.substring(95, 108));
-                    Double precoFechamento = Double.valueOf(line.substring(108, 121));
+                    Double precoAbertura = Double.valueOf(line.substring(56, 69)) /100;
+                    Double precoMax = Double.valueOf(line.substring(69, 82)) / 100;
+                    Double precoMin = Double.valueOf(line.substring(82, 95)) / 100;
+                    Double precoMedio = Double.valueOf(line.substring(95, 108)) /100;
+                    Double precoFechamento = Double.valueOf(line.substring(108, 121)) / 100;
 
                     //Double nrNegocios = Double.valueOf(line.substring(147, 152));
                     //Double total = Double.valueOf(line.substring(152, 170));

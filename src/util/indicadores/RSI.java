@@ -5,6 +5,8 @@
  */
 package util.indicadores;
 
+import java.util.List;
+
 /**
  * GERALMENE USADO COM 14 DIAS
  * RSI indica se uma ação está Superavaliada (70%), ou sobAvaliada(30%)
@@ -14,21 +16,24 @@ package util.indicadores;
 public class RSI implements Indicador {
 
     private final int periodo;
-    private final double[] precos;
+    private final List<Double> precos;
 
-    public RSI(double[] precos, int periodo) {
+    public RSI( List<Double> precos, int periodo) {
         this.precos = precos;
         this.periodo = periodo;
     }
 
     @Override
     public double calcula() {
-        int ultimoDia = precos.length - 1;
+        if(precos.size() < periodo){
+            return 0;
+        }
+        int ultimoDia = precos.size() - 1;
         int primeiroDia = ultimoDia - this.periodo + 1;
 
         double lucroMedio = 0, prejuizoMedio = 0;
         for (int dia = primeiroDia + 1; dia <= ultimoDia; dia++) {
-            double alteracao = precos[dia] - precos[dia - 1];
+            double alteracao = precos.get(dia) - precos.get(dia -1 );
             if (alteracao >= 0) {
                 lucroMedio += alteracao;
             } else {
@@ -37,7 +42,7 @@ public class RSI implements Indicador {
         }
 
         double rs = lucroMedio / Math.abs(prejuizoMedio);
-        double rsi = 100 - 100 / (1 + rs);
+        double rsi = 100 - (100 / (1 + rs));
 
         return rsi;
 

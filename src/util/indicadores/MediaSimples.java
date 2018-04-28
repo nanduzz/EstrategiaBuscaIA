@@ -5,16 +5,18 @@
  */
 package util.indicadores;
 
+import java.util.List;
+
 /**
  *
  * @author fernando
  */
 public class MediaSimples implements Indicador {
 
-    private final double[] precos;
+    private final List<Double> precos;
     private final int dias;
 
-    public MediaSimples(double[] dados, int dias) {
+    public MediaSimples(List<Double> dados, int dias) {
 
         this.precos = dados;
         this.dias = dias;
@@ -23,8 +25,11 @@ public class MediaSimples implements Indicador {
     @Override
     public double calcula() {
         double soma = 0;
-        for (int i = this.precos.length; i > this.precos.length - this.dias; i--) {
-            soma += precos[i];
+        if(this.precos.size() < this.dias ){
+            return 0;
+        }
+        for (int i = this.precos.size() -1; i > this.precos.size() - this.dias; i--) {
+            soma += this.precos.get(i);
         }
         
         return soma / this.dias;
