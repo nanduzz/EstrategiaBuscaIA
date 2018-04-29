@@ -21,10 +21,10 @@ public class Principal {
         System.out.println("Bem-vindo ao Simulador de portfólio");
 
         List<Dia> periodo2014e2015 = CarregaDados.carregaDados(
-                new File("src\\util\\COTAHIST_A2014.TXT"),
-                new File("src\\util\\COTAHIST_A2015.TXT"));
+                new File("COTAHIST_A2014.TXT"),
+                new File("COTAHIST_A2015.TXT"));
         List<Dia> periodo2016 = CarregaDados.carregaDados(
-                new File("src\\util\\COTAHIST_A2016.TXT"));
+                new File("COTAHIST_A2016.TXT"));
 
         EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaVinicius();
         estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
