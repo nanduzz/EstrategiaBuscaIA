@@ -29,10 +29,11 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     private final Set<String> diasTreino = new LinkedHashSet<>();
     private final Set<String> diasTeste = new LinkedHashSet<>();
     
-    private final Map<String, List<Empresa>> movimentoDia = new HashMap<>();
     private final Map<Empresas, Empresa> portfolio = new HashMap<>();
     private final Map<String, Mes> relatorio2016 = new HashMap<>();
     private final Ano relatorioAno = new Ano();
+    
+    private final List<Dia> diasEmpresas = new ArrayList<>();
 
     public EstrategiaBuscaMayza(){
         this.carteira = 100000D;
@@ -40,10 +41,6 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
         for(Empresas e: Empresas.values()){
             this.portfolio.put(e, new Empresa(e, 0, 0D, 10D));
         }
-        movimentoDia.put("Compradas", new ArrayList<>());
-        movimentoDia.put("Vendidas", new ArrayList<>());
-        movimentoDia.put("Ja tinham acoes", new ArrayList<>()); //ia comprar mas ja tinha acao
-        movimentoDia.put("Nao tinham acoes", new ArrayList<>()); //ia vender mas nao tinha acao
         for(Integer i=1;i<13;i++){
             if(i < 10){
                 relatorio2016.put("0" + i.toString(), new Mes());
@@ -93,11 +90,16 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
                 } else if(rsi > 70){
                     vendeAcoesEmpresa(diaEmpresa);
                 } else {
-                    
+                    Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
+                    emp.setComprado(false);
+                    emp.setVendido(false);
+                    emp.setEvaporar(true);
                 }
-                recalculaFeromonios();
                 diasPassados.get(diaEmpresa.getSigla()).add(diaEmpresa.getValorFechamento());
+                diasEmpresas.add(diaEmpresa);
             }
+            recalculaFeromonios();          
+            diasEmpresas.clear();
         } 
         for(String dia: diasTeste){ //para cada dia
             mesAtual = dia.substring(5,7);
@@ -112,11 +114,16 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
                 } else if(rsi > 70){
                     vendeAcoesEmpresa(diaEmpresa);
                 } else {
-                    
+                    Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
+                    emp.setComprado(false);
+                    emp.setVendido(false);
+                    emp.setEvaporar(true);
                 }
-                recalculaFeromonios();
                 diasPassados.get(diaEmpresa.getSigla()).add(diaEmpresa.getValorFechamento());
+                diasEmpresas.add(diaEmpresa);
             }
+            recalculaFeromonios();
+            diasEmpresas.clear();
             List<String> listTemp = new ArrayList<>(diasTeste);
             if(cont+1 < diasTeste.size()){
                 String diaTemp = listTemp.get(cont + 1);
@@ -136,16 +143,17 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     private boolean compra(Dia diaEmpresa){
         Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
         if(emp.getQtdAcoes() > 0){ //se tem ações, não compra mais
-            movimentoDia.get("Ja tinham acoes").add(emp);
             return false;
         } else {
+            emp.setComprado(true);
+            emp.setVendido(false);
+            emp.setEvaporar(false);
             Double investimento = (emp.getQtdFeromoniosDeInvestimento()*carteira)/100;
             carteira = carteira - investimento;
             carteiraVirtual = carteiraVirtual - investimento;
             Double sobra = investe(emp, investimento, diaEmpresa);
             carteira = carteira + sobra;
             carteiraVirtual = carteiraVirtual + sobra;
-            movimentoDia.get("Compradas").add(emp);
             return true;
         }
     }
@@ -160,21 +168,159 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     private boolean vendeAcoesEmpresa(Dia diaEmpresa){
         Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
         if(emp.getQtdAcoes() < 1){ //se nao tem acoes, nao vende
-            movimentoDia.get("Nao tinham acoes").add(emp);
             return false;
         } else {
+            emp.setVendido(true);
+            emp.setComprado(false);
+            emp.setEvaporar(false);
             carteira = carteira + (emp.getQtdAcoes()*diaEmpresa.getValorAbertura());
             carteiraVirtual = carteiraVirtual + (emp.getQtdAcoes()*diaEmpresa.getValorAbertura());
+            emp.setQtdAcoesVendidas(emp.getQtdAcoes());
+            emp.setValorVendaAcoes(diaEmpresa.getValorAbertura());
             emp.setQtdAcoes(0);
             emp.setValorCompraAcao(0D);
-            movimentoDia.get("Vendidas").add(emp);
             return true;
         }
     }
     
     private boolean recalculaFeromonios(){
-        //System.out.println("RECALCULA FEROMONIOS");
-        //evaporacao e incremento
+        Empresa empresa;
+        Empresa lucrativa = null;
+        Empresa prejuizo = null;       
+        Dia dia = null;
+        Double tempMaior = Double.MIN_VALUE;
+        Double tempMenor = Double.MIN_VALUE;
+        Double lucroEmpresa = null;
+        Double porcPrejuizo = 0D;
+        Double temp = 0D;
+        Double dist = 0D;
+        List<Empresa> evaporar = new ArrayList<>();
+        for(Empresas emp: Empresas.values()){
+            empresa = portfolio.get(emp);
+            for(Dia d: diasEmpresas){
+                if(d.getSigla().contains(emp.toString())){
+                   dia = d;
+                   break;
+                } 
+            }
+            if(dia != null){
+                if(empresa.isComprado()){    
+                    lucroEmpresa = (empresa.getQtdAcoes()*dia.getValorFechamento()) - (empresa.getQtdAcoes()*empresa.getValorCompraAcao());
+                    temp = ((empresa.getQtdAcoes()*empresa.getValorCompraAcao())*100)/(empresa.getQtdAcoes()*dia.getValorFechamento());
+                } else if(empresa.isVendido()){ 
+                    lucroEmpresa = (empresa.getQtdAcoesVendidas()*empresa.getValorVendaAcoes()) - (empresa.getQtdAcoesVendidas()*dia.getValorFechamento());
+                    temp = ((empresa.getQtdAcoesVendidas()*dia.getValorFechamento())*100)/(empresa.getQtdAcoesVendidas()*empresa.getValorVendaAcoes());
+                } else if(empresa.isEvaporar()){
+                    lucroEmpresa = 0D;
+                    evaporar.add(empresa);
+                }
+
+                if((lucroEmpresa > 0) && (lucroEmpresa > tempMaior)){                
+                    tempMaior = lucroEmpresa;
+                    lucrativa = empresa;
+                } else if((lucroEmpresa < 0) && (lucroEmpresa < tempMenor)){               
+                    tempMenor = lucroEmpresa;
+                    prejuizo = empresa;
+                    porcPrejuizo = temp-100;
+                }  
+            }
+        }
+        
+        if(lucrativa != null && prejuizo != null){  
+            Empresa lucra = portfolio.get(lucrativa.getSiglaEmpresa());
+            Empresa preju = portfolio.get(prejuizo.getSiglaEmpresa());
+            dist = (preju.getQtdFeromoniosDeInvestimento()*porcPrejuizo)/100;
+            lucra.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + dist);
+            preju.setQtdFeromoniosDeInvestimento(preju.getQtdFeromoniosDeInvestimento() - dist);
+            //lucra.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + (prejuizo.getQtdFeromoniosDeInvestimento()/2));
+            //preju.setQtdFeromoniosDeInvestimento(prejuizo.getQtdFeromoniosDeInvestimento() - (prejuizo.getQtdFeromoniosDeInvestimento()/2));
+        } 
+        if(!evaporar.isEmpty() && evaporar.size()<10){
+            Double feromonios = 0D;
+            List<Empresas> aSeremEvaporadas = new ArrayList<>();
+            for(Empresa e: evaporar){
+                feromonios = feromonios + ((10*e.getQtdFeromoniosDeInvestimento())/100); //tiro 10% doa feromonios dela
+                e.setQtdFeromoniosDeInvestimento(e.getQtdFeromoniosDeInvestimento() - ((10*e.getQtdFeromoniosDeInvestimento())/100));
+                aSeremEvaporadas.add(e.getSiglaEmpresa());
+            }
+            Double distribuir = feromonios/(10-evaporar.size()); //divide os feromonios entre as empresas que foram movimentadas
+            for(Empresas emp: Empresas.values()){
+                if(!aSeremEvaporadas.contains(emp)){
+                    empresa = portfolio.get(emp);
+                    empresa.setQtdFeromoniosDeInvestimento(empresa.getQtdFeromoniosDeInvestimento() + distribuir);
+                }
+            }
+        }
+         Double cont = 0D;
+        for(Empresas e: Empresas.values()){
+            cont = cont + portfolio.get(e).getQtdFeromoniosDeInvestimento();
+            System.out.println("FERO " + portfolio.get(e).getQtdFeromoniosDeInvestimento());
+        }
+        System.out.println("TOTAL " + cont);
+        
+        
+//        Empresa empresa;
+//        Empresa lucrativa = null;
+//        Empresa prejuizo = null;
+//        Double feroPrejuizoRelativo = null;
+//        Dia dia = null;
+//        Double tempMaior = Double.MIN_VALUE;
+//        Double tempMenor = Double.MIN_VALUE;
+//        Double lucroEmpresa = null;
+//        List<Empresa> dividirFeromonios = new ArrayList<>();
+//        List<Empresa> evaporar = new ArrayList<>();
+//        for(Empresas emp: Empresas.values()){
+//            empresa = portfolio.get(emp);
+//            for(Dia d: diasEmpresas){
+//                if(d.getSigla().contains(emp.toString())){
+//                   dia = d;
+//                   break;
+//                } else{
+//                    dia = null;
+//                }
+//            }
+//            if(dia!=null){
+//            if(empresa.isComprado()){    
+//                lucroEmpresa = dia.getValorFechamento() - empresa.getValorCompraAcao();
+//            } else if(empresa.isVendido()){ 
+//                lucroEmpresa = empresa.getValorVendaAcoes() - dia.getValorFechamento();
+//            } else if(empresa.isEvaporar()){
+//                lucroEmpresa = 0D;
+//                evaporar.add(empresa);
+//            }
+//             
+//            if((lucroEmpresa > 0) && (lucroEmpresa > tempMaior)){                
+//                tempMaior = lucroEmpresa;
+//                lucrativa = empresa;
+//            } else if((lucroEmpresa < 0) && (lucroEmpresa < tempMenor)){               
+//                tempMenor = lucroEmpresa;
+//                prejuizo = empresa;
+//                feroPrejuizoRelativo = (lucroEmpresa*100)/dia.getValorFechamento();
+//            } else {
+//                dividirFeromonios.add(empresa);
+//            }
+//            }
+//        }
+//        
+//        if(lucrativa != null){
+//            if(prejuizo != null) {
+//                Double feroASerRepassado = prejuizo.getQtdFeromoniosDeInvestimento() - ((prejuizo.getQtdFeromoniosDeInvestimento()*feroPrejuizoRelativo)/100);
+//                lucrativa.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + feroASerRepassado);
+//            } else {
+//                for(Empresa e: dividirFeromonios){
+//                    lucrativa.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + 1);
+//                    e.setQtdFeromoniosDeInvestimento(e.getQtdFeromoniosDeInvestimento()-1);
+//                }
+//            }
+//        }
+//        if(!evaporar.isEmpty()){
+//            Integer evap = evaporar.size()/(10-evaporar.size());
+//            for(Empresas emp: Empresas.values()){
+//                empresa = portfolio.get(emp);
+//                
+//                empresa.setQtdFeromoniosDeInvestimento(empresa.getQtdFeromoniosDeInvestimento()+evap);
+//            }
+//        }
         return true;
     }
     
@@ -236,6 +382,12 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
 
     @Override
     public String devolveResultadosMesAMes() {
+        Double cont = 0D;
+        for(Empresas e: Empresas.values()){
+            cont = cont + portfolio.get(e).getQtdFeromoniosDeInvestimento();
+            System.out.println("FERO " + portfolio.get(e).getQtdFeromoniosDeInvestimento());
+        }
+        System.out.println("TOTAL " + cont);
         Mes mes;
         StringBuilder relatorio = new StringBuilder();
         relatorio.append("----------------\nRELATORIO MENSAL\n----------------\n\n");
@@ -299,9 +451,12 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
         private Empresas siglaEmpresa;
         private Integer qtdAcoes; //quantas acoes da empresa eu tenho
         private Double valorCompraAcao; //por quanto cada acao foi comprada
+        private Double valorVendaAcoes = 0D;
+        private Integer qtdAcoesVendidas = 0;
         private Double qtdFeromoniosDeInvestimento; //qtd a ser investida dos 100% na empresa. Na venda é vendido tudo
-        private boolean vendida = false;
-        private boolean comprada = false;
+        boolean evaporar = false;
+        boolean vendido = false;
+        boolean comprado = false;
         
         public Empresa(Empresas siglaEmpresa, Integer qtdAcoes, Double valorCompraAcao, Double qtdFeromoniosDeInvestimento) {
             this.siglaEmpresa = siglaEmpresa;
@@ -342,24 +497,48 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
             this.valorCompraAcao = valorCompraAcao;
         }
 
-        public boolean isVendida() {
-            return vendida;
+        public boolean isEvaporar() {
+            return evaporar;
         }
 
-        public void setVendida(boolean vendida) {
-            this.vendida = vendida;
+        public void setEvaporar(boolean evaporar) {
+            this.evaporar = evaporar;
         }
 
-        public boolean isComprada() {
-            return comprada;
+        public boolean isVendido() {
+            return vendido;
         }
 
-        public void setComprada(boolean comprada) {
-            this.comprada = comprada;
+        public void setVendido(boolean vendido) {
+            this.vendido = vendido;
+        }
+
+        public boolean isComprado() {
+            return comprado;
+        }
+
+        public void setComprado(boolean comprado) {
+            this.comprado = comprado;
+        }
+
+        public Double getValorVendaAcoes() {
+            return valorVendaAcoes;
+        }
+
+        public void setValorVendaAcoes(Double valorVendaAcoes) {
+            this.valorVendaAcoes = valorVendaAcoes;
+        }
+
+        public Integer getQtdAcoesVendidas() {
+            return qtdAcoesVendidas;
+        }
+
+        public void setQtdAcoesVendidas(Integer qtdAcoesVendidas) {
+            this.qtdAcoesVendidas = qtdAcoesVendidas;
         }
         
         
-              
+        
     }
     
     class Mes {
