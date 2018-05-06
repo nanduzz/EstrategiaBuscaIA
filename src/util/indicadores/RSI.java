@@ -25,7 +25,7 @@ public class RSI implements Indicador {
 
     @Override
     public double calcula() {
-        if(precos.size() < periodo){
+        if(precos != null && precos.size() < periodo){
             return 0;
         }
         int ultimoDia = precos.size() - 1;
