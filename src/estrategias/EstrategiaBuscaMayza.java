@@ -5,12 +5,15 @@
  */
 package estrategias;
 
+import java.text.DecimalFormat;
+import java.time.Month;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.Objects;
 import modelo.Dia;
 import util.indicadores.RSI;
 
@@ -20,473 +23,493 @@ import util.indicadores.RSI;
  */
 public class EstrategiaBuscaMayza implements EstrategiaBusca {
     
-    private Double carteira;
-    private Double carteiraVirtual;
-    private final Double CARTEIRA_INICIAL = 100000D;
-    private final Map<String, List<Dia>> dadosTreino = new HashMap<>(); //
-    private final Map<String, List<Dia>> dadosTeste = new HashMap<>();
-    private final Map<String, List<Double>> diasPassados = new HashMap<>(); // siglaEmpresa / valor
-    private final Set<String> diasTreino = new LinkedHashSet<>();
-    private final Set<String> diasTeste = new LinkedHashSet<>();
+    private final Locale BRAZIL = new Locale("pt","BR");
+    private final DecimalFormat df = new DecimalFormat("###,##0.00");
+    private static final Integer QTD_DIAS_UTEIS_2016 = 249;
+    private static final Integer QTD_DIAS_UTEIS_2014_2015 = 488;
+    private static final Integer RSI_COMPRA = 30;
+    private static final Integer RSI_VENDA = 70;
+    private static final Integer DEVO_COMPRAR = 1;
+    private static final Integer DEVO_VENDER = 0;
+    private static final Integer NAO_DEVO_MOVIMENTAR = -1;
+    private static final Integer PERIODO_RSI = 7;
+    private static final Double CARTEIRA_INICIAL = 100000D;
+    private static final Double FEROMONIO_INICIAL_POR_EMPRESA = 10D;
+    private static final Double PORCENTAGEM_EVAPORACAO_FEROMONIO = 0.1; //10% da quantidade que ele tem.
+    private static final Double PORCENTAGEM_PERCA_FEROMONIO_PREJUIZO = 0.2;
+      
+    /*DADOS HISTORICOS*/
+    private final Map<String,List<Dia>> historico2014e2015 = new HashMap<>();
+    private final Map<String,List<Dia>> historico2016 = new HashMap<>();
+    private final Map<SiglaEmpresas,List<Double>> fechamentos = new HashMap<>();
+    private final Map<SiglaEmpresas,Double> aberturaUltimoDiaMes = new HashMap<>();
     
-    private final Map<Empresas, Empresa> portfolio = new HashMap<>();
-    private final Map<String, Mes> relatorio2016 = new HashMap<>();
-    private final Ano relatorioAno = new Ano();
+    /*MOVIMENTAÇÕES*/
+    private Double carteiraAtual;
+    private Double carteiraMesAnterior; //para o cálculo Mês a Mês
+    private Double carteiraVirtual; //para o cálculo Mês a Mês
     
-    private final List<Dia> diasEmpresas = new ArrayList<>();
-
+    private Double feromoniosParaDistribuir = 0D;
+    private Double feromoniosEvaporados = 0D;
+    private final List<SiglaEmpresas> empresasEvaporadas = new ArrayList<>();
+    private final Map<SiglaEmpresas,Double> empresasReceberFeromonios = new HashMap<>();
+    
+    private final Map<SiglaEmpresas,EmpresaDoPortfolio> portfolio = new HashMap<>();
+           
+    /*RELATÓRIOS*/
+    private final RelatorioAno relatorioAno = new RelatorioAno();
+    private final Map<Integer,RelatorioMes> relatorioMesAMes = new HashMap<>(); //chave = mês
+    private final Map<SiglaEmpresas,Double> ganhoMensalPorEmpresa = new HashMap<>();
+    private final Map<SiglaEmpresas,Double> ganhoAnualPorEmpresa = new HashMap<>();
+    
     public EstrategiaBuscaMayza(){
-        this.carteira = 100000D;
-        this.carteiraVirtual = 100000D;
-        for(Empresas e: Empresas.values()){
-            this.portfolio.put(e, new Empresa(e, 0, 0D, 10D));
+        this.carteiraAtual = CARTEIRA_INICIAL;
+        this.carteiraMesAnterior = CARTEIRA_INICIAL;
+        this.carteiraVirtual = CARTEIRA_INICIAL;
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            this.historico2014e2015.put(sigla.toString(), new ArrayList<>());
+            this.historico2016.put(sigla.toString(), new ArrayList<>());
+            this.portfolio.put(sigla, new EmpresaDoPortfolio(sigla));
+            this.fechamentos.put(sigla, new ArrayList<>());
+            this.ganhoMensalPorEmpresa.put(sigla, 0D);
+            this.ganhoAnualPorEmpresa.put(sigla, 0D);
         }
         for(Integer i=1;i<13;i++){
-            if(i < 10){
-                relatorio2016.put("0" + i.toString(), new Mes());
-            } else {
-                relatorio2016.put(i.toString(), new Mes());
-            }
+            this.relatorioMesAMes.put(i, new RelatorioMes());
         }
     }
-    
+
     @Override
-    public void recebeDadosTreino(List<Dia> periodo) {
-        periodo.forEach((Dia d) -> {
-            this.diasTreino.add(d.getData().toString());
-            if (!dadosTreino.containsKey(d.getData().toString())) {
-                dadosTreino.put(d.getData().toString(), new ArrayList<>());
-            }
-            dadosTreino.get(d.getData().toString()).add(d);
+    public void recebeDadosTreino(List<Dia> diasTreino) {
+        diasTreino.forEach((dia) -> {
+            historico2014e2015.get(dia.getSigla()).add(dia);
         });
     }
 
     @Override
-    public void recebeDadosTeste(List<Dia> periodo) {
-        periodo.forEach((Dia d) -> {
-            this.diasTeste.add(d.getData().toString());
-            if (!dadosTeste.containsKey(d.getData().toString())) {
-                dadosTeste.put(d.getData().toString(), new ArrayList<>());
-            }
-            dadosTeste.get(d.getData().toString()).add(d);
+    public void recebeDadosTeste(List<Dia> diasTeste) {
+        diasTeste.forEach((dia) -> {
+            historico2016.get(dia.getSigla()).add(dia);
         });
     }
 
     @Override
     public void aplicaEstrategiaBusca() {
-        int cont = 0;
-        String mesAnterior = "01";
-        String mesAtual = "01";
+        algoritmoTreino();
+        iniciaNovoAno();
+        algoritmoTeste();
+    }
+    
+    private void algoritmoTreino(){
+        Integer diaAtual = 0;
+        Integer indicadorMovimentacao;
+        Double lucroEmpresaDia;
+        Dia dia;
         
-        Dia ultimoDia = null;
-        for(String dia: diasTreino){ //para cada dia
-            for(Dia diaEmpresa: dadosTreino.get(dia)){
-                if (!diasPassados.containsKey(diaEmpresa.getSigla())) {
-                    diasPassados.put(diaEmpresa.getSigla(), new ArrayList<>());
+        while(diaAtual < QTD_DIAS_UTEIS_2014_2015){
+            for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+                if(diaAtual < historico2014e2015.get(sigla.toString()).size()){
+                    dia = historico2014e2015.get(sigla.toString()).get(diaAtual);
+                    indicadorMovimentacao = devoComprarVenderOuNaoMovimentar(sigla);
+                    if(indicadorMovimentacao.equals(DEVO_COMPRAR)){
+                        lucroEmpresaDia = comprarAcoes(sigla,dia);
+                        calculaPorcentagemPercaOuGanhoDeFeromonios(sigla,lucroEmpresaDia);
+                    } else if (indicadorMovimentacao.equals(DEVO_VENDER)){
+                        lucroEmpresaDia = venderAcoes(sigla,dia);
+                        calculaPorcentagemPercaOuGanhoDeFeromonios(sigla,lucroEmpresaDia);
+                    } else {
+                        naoMovimentarAcoes(sigla);
+                    }
+                    fechamentos.get(sigla).add(dia.getValorFechamento());
                 }
-                Double rsi = new RSI(this.diasPassados.get(diaEmpresa.getSigla()), 7).calcula();
-                if(rsi < 30 && rsi != 0){
-                    compra(diaEmpresa);
-                } else if(rsi > 70){
-                    vendeAcoesEmpresa(diaEmpresa);
+            } 
+            recalculaFeromonios();
+            diaAtual++;
+        }
+    }
+    
+    private void algoritmoTeste(){
+        Integer diaAtual = 0;
+        Integer indicadorMovimentacao;       
+        Double lucroEmpresaDia = 0D;
+        Boolean isFinalMes = Boolean.FALSE;
+        Dia dia = null;
+        
+        while(diaAtual < QTD_DIAS_UTEIS_2016){
+            for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+                dia = historico2016.get(sigla.toString()).get(diaAtual);
+                indicadorMovimentacao = devoComprarVenderOuNaoMovimentar(sigla);
+                if(indicadorMovimentacao.equals(DEVO_COMPRAR)){
+                    lucroEmpresaDia = comprarAcoes(sigla,dia);
+                    calculaPorcentagemPercaOuGanhoDeFeromonios(sigla,lucroEmpresaDia);
+                } else if (indicadorMovimentacao.equals(DEVO_VENDER)){
+                    lucroEmpresaDia = venderAcoes(sigla,dia);
+                    calculaPorcentagemPercaOuGanhoDeFeromonios(sigla,lucroEmpresaDia);
                 } else {
-                    Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
-                    emp.setComprado(false);
-                    emp.setVendido(false);
-                    emp.setEvaporar(true);
+                    naoMovimentarAcoes(sigla);
                 }
-                diasPassados.get(diaEmpresa.getSigla()).add(diaEmpresa.getValorFechamento());
-                diasEmpresas.add(diaEmpresa);
+                fechamentos.get(sigla).add(dia.getValorFechamento());               
+                isFinalMes = atualizaGanhosEmpresaMes(sigla, lucroEmpresaDia, diaAtual);
+                
+                if(isFinalMes){ aberturaUltimoDiaMes.put(sigla, dia.getValorAbertura()); }
+                
+                atualizaGanhosEmpresaAno(sigla, lucroEmpresaDia);
+                
+                lucroEmpresaDia = 0D;
             }
-            recalculaFeromonios();          
-            diasEmpresas.clear();
-        } 
-        for(String dia: diasTeste){ //para cada dia
-            mesAtual = dia.substring(5,7);
-            for(Dia diaEmpresa: dadosTeste.get(dia)){
-                ultimoDia = diaEmpresa;
-                if (!diasPassados.containsKey(diaEmpresa.getSigla())) {
-                    diasPassados.put(diaEmpresa.getSigla(), new ArrayList<>());
-                }
-                Double rsi = new RSI(this.diasPassados.get(diaEmpresa.getSigla()), 7).calcula();
-                if(rsi < 30 && rsi != 0){
-                    compra(diaEmpresa);
-                } else if(rsi > 70){
-                    vendeAcoesEmpresa(diaEmpresa);
-                } else {
-                    Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
-                    emp.setComprado(false);
-                    emp.setVendido(false);
-                    emp.setEvaporar(true);
-                }
-                diasPassados.get(diaEmpresa.getSigla()).add(diaEmpresa.getValorFechamento());
-                diasEmpresas.add(diaEmpresa);
+            if(isFinalMes) { 
+                atualizaRelatorioMesAMes(dia.getData().getMonthValue());
             }
             recalculaFeromonios();
-            diasEmpresas.clear();
-            List<String> listTemp = new ArrayList<>(diasTeste);
-            if(cont+1 < diasTeste.size()){
-                String diaTemp = listTemp.get(cont + 1);
-                if(!mesAtual.equals(diaTemp.substring(5,7))){
-                    fechaMes(ultimoDia);
-                }
-            }            
-            cont++;
-            if(cont == diasTeste.size()){
-                fechaMes(ultimoDia);
-                fechaAno(ultimoDia);
-            }
-            
+            diaAtual++;
+        }
+        atualizaRelatorioAnual();
+    }
+    
+    private Integer devoComprarVenderOuNaoMovimentar(SiglaEmpresas sigla){
+        Double rsi = new RSI(this.fechamentos.get(sigla), PERIODO_RSI).calcula();
+        if(rsi < RSI_COMPRA && rsi != 0){
+            return DEVO_COMPRAR;
+        } else if(rsi > RSI_VENDA){
+            return DEVO_VENDER;
         } 
+        return NAO_DEVO_MOVIMENTAR;
     }
     
-    private boolean compra(Dia diaEmpresa){
-        Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
-        if(emp.getQtdAcoes() > 0){ //se tem ações, não compra mais
-            return false;
-        } else {
-            emp.setComprado(true);
-            emp.setVendido(false);
-            emp.setEvaporar(false);
-            Double investimento = (emp.getQtdFeromoniosDeInvestimento()*carteira)/100;
-            carteira = carteira - investimento;
-            carteiraVirtual = carteiraVirtual - investimento;
-            Double sobra = investe(emp, investimento, diaEmpresa);
-            carteira = carteira + sobra;
-            carteiraVirtual = carteiraVirtual + sobra;
-            return true;
-        }
-    }
-   
-    private Double investe(Empresa emp, Double investimento, Dia diaEmpresa){
-        Double qtdAcoes = (investimento/diaEmpresa.getValorAbertura());
-        emp.setQtdAcoes(qtdAcoes.intValue());
-        emp.setValorCompraAcao(diaEmpresa.getValorAbertura());
-        return investimento - (qtdAcoes.intValue()*diaEmpresa.getValorAbertura());
-    }
-    
-    private boolean vendeAcoesEmpresa(Dia diaEmpresa){
-        Empresa emp = portfolio.get(Empresas.valueOf(diaEmpresa.getSigla()));
-        if(emp.getQtdAcoes() < 1){ //se nao tem acoes, nao vende
-            return false;
-        } else {
-            emp.setVendido(true);
-            emp.setComprado(false);
-            emp.setEvaporar(false);
-            carteira = carteira + (emp.getQtdAcoes()*diaEmpresa.getValorAbertura());
-            carteiraVirtual = carteiraVirtual + (emp.getQtdAcoes()*diaEmpresa.getValorAbertura());
-            emp.setQtdAcoesVendidas(emp.getQtdAcoes());
-            emp.setValorVendaAcoes(diaEmpresa.getValorAbertura());
-            emp.setQtdAcoes(0);
-            emp.setValorCompraAcao(0D);
-            return true;
-        }
-    }
-    
-    private boolean recalculaFeromonios(){
-        Empresa empresa;
-        Empresa lucrativa = null;
-        Empresa prejuizo = null;       
-        Dia dia = null;
-        Double tempMaior = Double.MIN_VALUE;
-        Double tempMenor = Double.MIN_VALUE;
-        Double lucroEmpresa = null;
-        Double porcPrejuizo = 0D;
-        Double temp = 0D;
-        Double dist = 0D;
-        List<Empresa> evaporar = new ArrayList<>();
-        for(Empresas emp: Empresas.values()){
-            empresa = portfolio.get(emp);
-            for(Dia d: diasEmpresas){
-                if(d.getSigla().contains(emp.toString())){
-                   dia = d;
-                   break;
-                } 
-            }
-            if(dia != null){
-                if(empresa.isComprado()){    
-                    lucroEmpresa = (empresa.getQtdAcoes()*dia.getValorFechamento()) - (empresa.getQtdAcoes()*empresa.getValorCompraAcao());
-                    temp = ((empresa.getQtdAcoes()*empresa.getValorCompraAcao())*100)/(empresa.getQtdAcoes()*dia.getValorFechamento());
-                } else if(empresa.isVendido()){ 
-                    lucroEmpresa = (empresa.getQtdAcoesVendidas()*empresa.getValorVendaAcoes()) - (empresa.getQtdAcoesVendidas()*dia.getValorFechamento());
-                    temp = ((empresa.getQtdAcoesVendidas()*dia.getValorFechamento())*100)/(empresa.getQtdAcoesVendidas()*empresa.getValorVendaAcoes());
-                } else if(empresa.isEvaporar()){
-                    lucroEmpresa = 0D;
-                    evaporar.add(empresa);
-                }
+    private Double comprarAcoes(SiglaEmpresas sigla, Dia dia){
+        EmpresaDoPortfolio empresa;
+        Double feromonioInvestimento;
+        Double valorMaximoInvestimento;
+        Double qtdMaximaAcoes;
+        Double sobra;
+        Double lucroSobreFechamento;
+        
+        empresa = portfolio.get(sigla);
+        if(!(empresa.getQuantidadeAcoesCompradas() > 0)){
+            feromonioInvestimento = empresa.getQuantidadeFeromoniosInvestimento();
+            valorMaximoInvestimento = ((carteiraAtual*feromonioInvestimento)/100);
+            qtdMaximaAcoes = valorMaximoInvestimento/dia.getValorAbertura();
+            sobra = valorMaximoInvestimento - (qtdMaximaAcoes.intValue()*dia.getValorAbertura());
 
-                if((lucroEmpresa > 0) && (lucroEmpresa > tempMaior)){                
-                    tempMaior = lucroEmpresa;
-                    lucrativa = empresa;
-                } else if((lucroEmpresa < 0) && (lucroEmpresa < tempMenor)){               
-                    tempMenor = lucroEmpresa;
-                    prejuizo = empresa;
-                    porcPrejuizo = temp-100;
-                }  
-            }
+            carteiraAtual = carteiraAtual - (valorMaximoInvestimento-sobra);
+            carteiraVirtual = carteiraAtual;
+            empresa.setQuantidadeAcoesCompradas(qtdMaximaAcoes.intValue());
+            empresa.setValorCompraAcao(dia.getValorAbertura());
+            lucroSobreFechamento = (qtdMaximaAcoes.intValue()*dia.getValorFechamento()) - (qtdMaximaAcoes.intValue()*empresa.getValorCompraAcao());
+        } else {
+            lucroSobreFechamento = 0D; 
+        }      
+        return lucroSobreFechamento;
+    } 
+    
+    private Double venderAcoes(SiglaEmpresas sigla, Dia dia){
+        EmpresaDoPortfolio empresa;
+        Double valorVendido;
+        Integer qtdVendido;
+        Double lucroSobreFechamento;
+        
+        empresa = portfolio.get(sigla);
+        if(!(empresa.getQuantidadeAcoesCompradas() == 0)){
+            valorVendido = dia.getValorAbertura();
+            qtdVendido = empresa.getQuantidadeAcoesCompradas();
+            carteiraAtual = carteiraAtual + (empresa.getQuantidadeAcoesCompradas()*dia.getValorAbertura());
+            carteiraVirtual = carteiraAtual;
+            empresa.setQuantidadeAcoesCompradas(0);
+            empresa.setValorCompraAcao(0D);
+            empresa.setQuantidadeAcoesVendidas(qtdVendido);
+            empresa.setValorVendaAcao(valorVendido);
+            lucroSobreFechamento = (qtdVendido*valorVendido) - qtdVendido*dia.getValorFechamento();
+        } else {
+            lucroSobreFechamento = 0D; 
         }
         
-        if(lucrativa != null && prejuizo != null){  
-            Empresa lucra = portfolio.get(lucrativa.getSiglaEmpresa());
-            Empresa preju = portfolio.get(prejuizo.getSiglaEmpresa());
-            dist = (preju.getQtdFeromoniosDeInvestimento()*porcPrejuizo)/100;
-            lucra.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + dist);
-            preju.setQtdFeromoniosDeInvestimento(preju.getQtdFeromoniosDeInvestimento() - dist);
-            //lucra.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + (prejuizo.getQtdFeromoniosDeInvestimento()/2));
-            //preju.setQtdFeromoniosDeInvestimento(prejuizo.getQtdFeromoniosDeInvestimento() - (prejuizo.getQtdFeromoniosDeInvestimento()/2));
+        return lucroSobreFechamento;
+    } 
+    
+    private void naoMovimentarAcoes(SiglaEmpresas sigla){
+        EmpresaDoPortfolio empresa;
+        Double feromoniosEmpresa;
+        Double evaporar;
+        
+        empresa = portfolio.get(sigla);
+        feromoniosEmpresa = empresa.getQuantidadeFeromoniosInvestimento();
+        
+        evaporar = feromoniosEmpresa*PORCENTAGEM_EVAPORACAO_FEROMONIO;
+        empresa.setQuantidadeFeromoniosInvestimento(feromoniosEmpresa - evaporar);
+        feromoniosEvaporados = feromoniosEvaporados + evaporar;
+        empresasEvaporadas.add(sigla);
+    } 
+    
+    private void calculaPorcentagemPercaOuGanhoDeFeromonios(SiglaEmpresas sigla, Double lucroMovimentacao){
+        EmpresaDoPortfolio empresa;
+        Double feromoniosEmpresa;
+        Double feromonioPerdido;
+        
+        empresa = portfolio.get(sigla);
+        feromoniosEmpresa = empresa.getQuantidadeFeromoniosInvestimento();
+        
+        if(lucroMovimentacao > 0){
+            empresasReceberFeromonios.put(sigla, 0D);
+        } else if(lucroMovimentacao < 0){
+            feromonioPerdido = feromoniosEmpresa*PORCENTAGEM_PERCA_FEROMONIO_PREJUIZO;
+            empresa.setQuantidadeFeromoniosInvestimento(feromoniosEmpresa - feromonioPerdido);
+            feromoniosParaDistribuir = feromoniosParaDistribuir + feromonioPerdido;
         } 
-        if(!evaporar.isEmpty() && evaporar.size()<10){
-            Double feromonios = 0D;
-            List<Empresas> aSeremEvaporadas = new ArrayList<>();
-            for(Empresa e: evaporar){
-                feromonios = feromonios + ((10*e.getQtdFeromoniosDeInvestimento())/100); //tiro 10% doa feromonios dela
-                e.setQtdFeromoniosDeInvestimento(e.getQtdFeromoniosDeInvestimento() - ((10*e.getQtdFeromoniosDeInvestimento())/100));
-                aSeremEvaporadas.add(e.getSiglaEmpresa());
-            }
-            Double distribuir = feromonios/(10-evaporar.size()); //divide os feromonios entre as empresas que foram movimentadas
-            for(Empresas emp: Empresas.values()){
-                if(!aSeremEvaporadas.contains(emp)){
-                    empresa = portfolio.get(emp);
-                    empresa.setQtdFeromoniosDeInvestimento(empresa.getQtdFeromoniosDeInvestimento() + distribuir);
-                }
-            }
-        }
-         Double cont = 0D;
-        for(Empresas e: Empresas.values()){
-            cont = cont + portfolio.get(e).getQtdFeromoniosDeInvestimento();
-            System.out.println("FERO " + portfolio.get(e).getQtdFeromoniosDeInvestimento());
-        }
-        System.out.println("TOTAL " + cont);
-        
-        
-//        Empresa empresa;
-//        Empresa lucrativa = null;
-//        Empresa prejuizo = null;
-//        Double feroPrejuizoRelativo = null;
-//        Dia dia = null;
-//        Double tempMaior = Double.MIN_VALUE;
-//        Double tempMenor = Double.MIN_VALUE;
-//        Double lucroEmpresa = null;
-//        List<Empresa> dividirFeromonios = new ArrayList<>();
-//        List<Empresa> evaporar = new ArrayList<>();
-//        for(Empresas emp: Empresas.values()){
-//            empresa = portfolio.get(emp);
-//            for(Dia d: diasEmpresas){
-//                if(d.getSigla().contains(emp.toString())){
-//                   dia = d;
-//                   break;
-//                } else{
-//                    dia = null;
-//                }
-//            }
-//            if(dia!=null){
-//            if(empresa.isComprado()){    
-//                lucroEmpresa = dia.getValorFechamento() - empresa.getValorCompraAcao();
-//            } else if(empresa.isVendido()){ 
-//                lucroEmpresa = empresa.getValorVendaAcoes() - dia.getValorFechamento();
-//            } else if(empresa.isEvaporar()){
-//                lucroEmpresa = 0D;
-//                evaporar.add(empresa);
-//            }
-//             
-//            if((lucroEmpresa > 0) && (lucroEmpresa > tempMaior)){                
-//                tempMaior = lucroEmpresa;
-//                lucrativa = empresa;
-//            } else if((lucroEmpresa < 0) && (lucroEmpresa < tempMenor)){               
-//                tempMenor = lucroEmpresa;
-//                prejuizo = empresa;
-//                feroPrejuizoRelativo = (lucroEmpresa*100)/dia.getValorFechamento();
-//            } else {
-//                dividirFeromonios.add(empresa);
-//            }
-//            }
-//        }
-//        
-//        if(lucrativa != null){
-//            if(prejuizo != null) {
-//                Double feroASerRepassado = prejuizo.getQtdFeromoniosDeInvestimento() - ((prejuizo.getQtdFeromoniosDeInvestimento()*feroPrejuizoRelativo)/100);
-//                lucrativa.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + feroASerRepassado);
-//            } else {
-//                for(Empresa e: dividirFeromonios){
-//                    lucrativa.setQtdFeromoniosDeInvestimento(lucrativa.getQtdFeromoniosDeInvestimento() + 1);
-//                    e.setQtdFeromoniosDeInvestimento(e.getQtdFeromoniosDeInvestimento()-1);
-//                }
-//            }
-//        }
-//        if(!evaporar.isEmpty()){
-//            Integer evap = evaporar.size()/(10-evaporar.size());
-//            for(Empresas emp: Empresas.values()){
-//                empresa = portfolio.get(emp);
-//                
-//                empresa.setQtdFeromoniosDeInvestimento(empresa.getQtdFeromoniosDeInvestimento()+evap);
-//            }
-//        }
-        return true;
     }
     
-    private void fechaMes(Dia ultimoDia){
-        Empresa empresa;
-        Double tempMaior = Double.MIN_VALUE;
-        Double tempMenor = Double.MIN_VALUE;
-        Double lucroEmpresa;
-        Mes mes = relatorio2016.get(ultimoDia.getData().toString().substring(5, 7));;
-        for(Empresas emp: Empresas.values()){
-            empresa = portfolio.get(emp);
-            lucroEmpresa = (empresa.getQtdAcoes()*ultimoDia.getValorAbertura()) - (empresa.getQtdAcoes()*empresa.getValorCompraAcao()); //quanto ta valendo - quanto pagou
-            carteiraVirtual = carteiraVirtual + (empresa.getQtdAcoes()* ultimoDia.getValorAbertura());
-            if(lucroEmpresa > tempMaior ){
-                mes.setMaiorLucro(lucroEmpresa);
-                mes.setNomeMaiorLucro(empresa.getSiglaEmpresa());
-                tempMaior = lucroEmpresa;
-            } else if(lucroEmpresa < tempMenor){
-                mes.setMenorLucro(lucroEmpresa);
-                mes.setNomeMenorLucro(empresa.getSiglaEmpresa());
-                tempMenor = lucroEmpresa;
+    private void recalculaFeromonios(){
+        /*Divide a evaporação entre as empresas que foram movimentadas, independente do lucro ou prejuizo*/
+        Double qtdFeromoniosEvaporadosParaCadaEmpresa;
+        Double qtdFeromoniosMerecido;
+        EmpresaDoPortfolio empresa;
+        Double totalFeromonios;
+        
+        if(empresasEvaporadas.size() < 10){
+            qtdFeromoniosEvaporadosParaCadaEmpresa = feromoniosEvaporados/(10-empresasEvaporadas.size());
+        } else {
+            qtdFeromoniosEvaporadosParaCadaEmpresa = feromoniosEvaporados/10;
+        }
+        
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            if(empresasReceberFeromonios.isEmpty()){
+                empresasReceberFeromonios.put(sigla, 10D);
+            } 
+            if(empresasReceberFeromonios.containsKey(sigla)){
+                empresasReceberFeromonios.put(sigla, (100.0/empresasReceberFeromonios.size()));
+                qtdFeromoniosMerecido = (feromoniosParaDistribuir*empresasReceberFeromonios.get(sigla))/100;
+                empresa = portfolio.get(sigla);
+                totalFeromonios = empresa.getQuantidadeFeromoniosInvestimento();
+                empresa.setQuantidadeFeromoniosInvestimento(totalFeromonios + qtdFeromoniosMerecido);
             }
         }
-        mes.setCarteiraMes(carteiraVirtual);
-        carteiraVirtual = carteira;
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            if(!empresasEvaporadas.contains(sigla) || empresasEvaporadas.size() == 10){
+               empresa = portfolio.get(sigla);
+               totalFeromonios = empresa.getQuantidadeFeromoniosInvestimento();
+               empresa.setQuantidadeFeromoniosInvestimento(totalFeromonios + qtdFeromoniosEvaporadosParaCadaEmpresa);
+            }
+        }
+        feromoniosEvaporados = 0D;
+        feromoniosParaDistribuir = 0D;
+        empresasEvaporadas.clear();
+        empresasReceberFeromonios.clear();
+        Double total = 0D;
+//        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+//            empresa = portfolio.get(sigla);
+//            total = total + empresa.getQuantidadeFeromoniosInvestimento();
+//        }
+//        System.out.println("Total: " + total);
     }
     
-    private void fechaAno(Dia ultimoDia){
-        Empresa empresa;
-        Double tempMaior = Double.MIN_VALUE;
-        Double tempMenor = Double.MIN_VALUE;
-        Double lucroEmpresa;
-        for(Empresas emp: Empresas.values()){
-            empresa = portfolio.get(emp);
-            lucroEmpresa = (empresa.getQtdAcoes()*ultimoDia.getValorAbertura()) - (empresa.getQtdAcoes()*empresa.getValorCompraAcao()); //quanto ta valendo - quanto pagou
-            carteira = carteira + (empresa.getQtdAcoes()* ultimoDia.getValorAbertura());
-            //carteiraVirtual = carteiraVirtual + (empresa.getQtdAcoes()* ultimoDia.getValorAbertura());
-            empresa.setQtdAcoes(0);
-            empresa.setValorCompraAcao(0D);           
-            if(lucroEmpresa > tempMaior ){
-                relatorioAno.setMaiorLucro(lucroEmpresa);
-                relatorioAno.setNomeMaiorLucro(empresa.getSiglaEmpresa());
-                tempMaior = lucroEmpresa;
-            } else if(lucroEmpresa < tempMenor){
-                relatorioAno.setMenorLucro(lucroEmpresa);
-                relatorioAno.setNomeMenorLucro(empresa.getSiglaEmpresa());
-                tempMenor = lucroEmpresa;
-            }
+    private Boolean atualizaGanhosEmpresaMes(SiglaEmpresas sigla, Double lucroEmpresaDia, Integer diaAtual){
+        Double ganhosEmpresa;
+        Boolean isFinalMes;
+        Dia diaHoje;
+        Dia proximoDia;
+        
+        diaHoje = historico2016.get(sigla.toString()).get(diaAtual);
+        if(diaAtual+1 < QTD_DIAS_UTEIS_2016){
+            proximoDia = historico2016.get(sigla.toString()).get(diaAtual+1);
+            isFinalMes = diaHoje.getData().getMonthValue() != proximoDia.getData().getMonthValue();                    
+        } else {
+            isFinalMes = (diaAtual + 1) == QTD_DIAS_UTEIS_2016;
+        }                  
+        ganhosEmpresa = ganhoMensalPorEmpresa.get(sigla);
+        ganhosEmpresa = ganhosEmpresa + lucroEmpresaDia;
+        ganhoMensalPorEmpresa.put(sigla, ganhosEmpresa);
+        
+        return isFinalMes;
+    }
+    
+    private void atualizaRelatorioMesAMes(Integer mes){
+        RelatorioMes relatorioMes;
+        Double ganhoTemp;
+        Double maiorGanho = Double.NEGATIVE_INFINITY;
+        Double menorGanho = Double.MAX_VALUE;
+        SiglaEmpresas siglaMaiorGanho = null;
+        SiglaEmpresas siglaMenorGanho = null;
+        Double porcRelacaoInicial;
+        Double porcRelacaoAnterior;
+  
+        relatorioMes = relatorioMesAMes.get(mes);
+        /*CALCULA EMPRESAS COM MAIOR E MENOR GANHOS NO MES*/
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            ganhoTemp = ganhoMensalPorEmpresa.get(sigla);
+            maiorGanho = Math.max(ganhoTemp, maiorGanho);
+            menorGanho = Math.min(ganhoTemp, menorGanho);
+            if(Objects.equals(ganhoTemp, maiorGanho)){ siglaMaiorGanho = sigla; } 
+            if(Objects.equals(ganhoTemp, menorGanho)){ siglaMenorGanho = sigla; }
         }
-        relatorioAno.setCarteiraAno(carteira);
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){ 
+            /*Zera ganhos mensais da empresa*/
+            ganhoMensalPorEmpresa.put(sigla, 0D);
+        }
+        /*CALCULA CARTEIRA DO MES COM RELACAO A CARTEIRA INICIAL E ANTERIOR*/
+        EmpresaDoPortfolio empresa;
+        Double valorAberturaUltimoDia;
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){ 
+            empresa = portfolio.get(sigla);
+            valorAberturaUltimoDia = aberturaUltimoDiaMes.get(sigla);
+            carteiraVirtual = carteiraVirtual + (empresa.getQuantidadeAcoesCompradas()*valorAberturaUltimoDia);
+        }
+        
+        porcRelacaoInicial = ((carteiraVirtual*100)/CARTEIRA_INICIAL)-100;
+        porcRelacaoAnterior = ((carteiraVirtual*100)/carteiraMesAnterior)-100;
+        
+        relatorioMes.setAcaoMaiorGanhoMes(siglaMaiorGanho);
+        relatorioMes.setAcaoMenorGanhoMes(siglaMenorGanho);
+        relatorioMes.setValorMaiorGanho(maiorGanho);
+        relatorioMes.setValorMenorGanho(menorGanho);
+        relatorioMes.setCarteiraMes(carteiraVirtual);
+        relatorioMes.setPorcGanhoMesComRelacaoCarteiraInicial(porcRelacaoInicial);
+        relatorioMes.setPorcGanhoMesComRelacaoCarteiraAnterior(porcRelacaoAnterior);
+        
+        carteiraMesAnterior = carteiraVirtual;
+        carteiraVirtual = carteiraAtual;
+    }
+    
+    private void atualizaGanhosEmpresaAno(SiglaEmpresas sigla, Double lucroEmpresaDia){
+        Double ganhosEmpresa;
+                       
+        ganhosEmpresa = ganhoAnualPorEmpresa.get(sigla);
+        ganhosEmpresa = ganhosEmpresa + lucroEmpresaDia;
+        ganhoAnualPorEmpresa.put(sigla, ganhosEmpresa);
+    }
+    
+    private void atualizaRelatorioAnual(){
+        Double ganhoTemp;
+        Double maiorGanho = Double.NEGATIVE_INFINITY;
+        Double menorGanho = Double.MAX_VALUE;
+        SiglaEmpresas siglaMaiorGanho = null;
+        SiglaEmpresas siglaMenorGanho = null;
+        Double porcRelacaoInicial;
+        
+        /*CALCULA EMPRESAS COM MAIOR E MENOR GANHOS NO ANO*/
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            ganhoTemp = ganhoAnualPorEmpresa.get(sigla);
+            maiorGanho = Math.max(ganhoTemp, maiorGanho);
+            menorGanho = Math.min(ganhoTemp, menorGanho);
+            if(Objects.equals(ganhoTemp, maiorGanho)){ siglaMaiorGanho = sigla; } 
+            if(Objects.equals(ganhoTemp, menorGanho)){ siglaMenorGanho = sigla; }
+        }
+        
+        /*CALCULA CARTEIRA DO ANO COM RELACAO A CARTEIRA INICIAL*/
+        EmpresaDoPortfolio empresa;
+        Double valorAberturaUltimoDia;
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){ 
+            empresa = portfolio.get(sigla);
+            valorAberturaUltimoDia = aberturaUltimoDiaMes.get(sigla);
+            carteiraAtual = carteiraAtual + (empresa.getQuantidadeAcoesCompradas()*valorAberturaUltimoDia);
+        }
+        
+        porcRelacaoInicial = ((carteiraAtual*100)/CARTEIRA_INICIAL)-100;
+        
+        relatorioAno.setAcaoMaiorGanhoAno(siglaMaiorGanho);
+        relatorioAno.setAcaoMenorGanhoAno(siglaMenorGanho);
+        relatorioAno.setValorMaiorGanho(maiorGanho);
+        relatorioAno.setValorMenorGanho(menorGanho);
+        relatorioAno.setCarteiraFinal(carteiraAtual);
+        relatorioAno.setPorcGanhoAnoComRelacaoCarteiraInicial(porcRelacaoInicial);
+        
+    }
+    
+    private void iniciaNovoAno(){
+        carteiraAtual = CARTEIRA_INICIAL;
+        carteiraVirtual = CARTEIRA_INICIAL;
+        carteiraMesAnterior = CARTEIRA_INICIAL;
+        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
+            fechamentos.put(sigla, new ArrayList<>());
+            reiniciaPortfolioEmpresa(sigla);
+        }
+    }
+    
+    private void reiniciaPortfolioEmpresa(SiglaEmpresas sigla){
+        EmpresaDoPortfolio empresa;
+        empresa = portfolio.get(sigla);
+        
+        empresa.setQuantidadeAcoesCompradas(0);
+        empresa.setQuantidadeAcoesVendidas(0);
+        empresa.setValorCompraAcao(0D);
+        empresa.setValorVendaAcao(0D);
+        empresa.setCarteiraEmpresa(0D);
     }
 
     @Override
     public String devolveValorPortfolio() {
-        Double perc = ((relatorioAno.getCarteiraAno() - CARTEIRA_INICIAL)/CARTEIRA_INICIAL) * 100;
-        return "\nO investimento de " + CARTEIRA_INICIAL + " foi transformado em " + relatorioAno.getCarteiraAno() 
-                + ". Isto equivale a um aumento de " + perc.toString() + "%.";
+        StringBuilder string = new StringBuilder();
+        string.append("x-----------------x\n");
+        string.append("| RESULTADO FINAL |\n");
+        string.append("x-----------------x\n\n");
+        string.append("O investimento de " + df.format(CARTEIRA_INICIAL) + " foi transformado em " + df.format(relatorioAno.getCarteiraFinal())
+                + ". Isto equivale a um aumento de " + df.format(relatorioAno.getPorcGanhoAnoComRelacaoCarteiraInicial()) + "%.\n");
+        return string.toString();
     }
 
     @Override
     public String devolveResultadosMesAMes() {
-        Double cont = 0D;
-        for(Empresas e: Empresas.values()){
-            cont = cont + portfolio.get(e).getQtdFeromoniosDeInvestimento();
-            System.out.println("FERO " + portfolio.get(e).getQtdFeromoniosDeInvestimento());
+        StringBuilder string = new StringBuilder();
+        RelatorioMes relatorioMes;
+        string.append("x-----------------------------------x\n");
+        string.append("| RESULTADO MENSAL DE INVESTIMENTOS |\n");
+        string.append("x-----------------------------------x\n\n");
+        for(Month mes: Month.values()){
+            relatorioMes = relatorioMesAMes.get(mes.getValue());
+            string.append("| ").append(mes.getDisplayName(TextStyle.FULL, BRAZIL).toUpperCase()).append(" |\n");
+            string.append("Carteira: ").append(df.format(relatorioMes.getCarteiraMes())).append(" -> Aprox. ").append(df.format(relatorioMes.getPorcGanhoMesComRelacaoCarteiraAnterior())).append("% em relação a carteira anterior e ").append(df.format(relatorioMes.getPorcGanhoMesComRelacaoCarteiraInicial())).append("% em relação a carteira inicial.\n");
+            string.append("Maior Movimentação: ").append(relatorioMes.getAcaoMaiorGanhoMes()).append(" com movimentação de ").append(df.format(relatorioMes.getValorMaiorGanho())).append("\n");
+            string.append("Menor Movimentação: ").append(relatorioMes.getAcaoMenorGanhoMes()).append(" com movimentação de ").append(df.format(relatorioMes.getValorMenorGanho())).append("\n\n");
         }
-        System.out.println("TOTAL " + cont);
-        Mes mes;
-        StringBuilder relatorio = new StringBuilder();
-        relatorio.append("----------------\nRELATORIO MENSAL\n----------------\n\n");
-        for(Integer i=1;i<13;i++){
-            if(i < 10){
-                mes = relatorio2016.get("0" + i.toString());
-                relatorio.append(pegaMes("0" + i.toString()) + "\n");
-            } else {
-                mes = relatorio2016.get(i.toString());
-                relatorio.append(pegaMes(i.toString()) + "\n");
-            }
-            relatorio.append("Carteira: " + mes.getCarteiraMes() + " (" + ((mes.getCarteiraMes() - CARTEIRA_INICIAL)/CARTEIRA_INICIAL) * 100 + ")\n");
-            relatorio.append("Maior Lucro: " + mes.getNomeMaiorLucro() + " com " + mes.getMaiorLucro() + " de retorno.\n");
-            relatorio.append("Menor Lucro: " + mes.getNomeMenorLucro() + " com " + mes.getMenorLucro() + " de retorno.\n-------------------------------------\n");
-        }
-        return relatorio.toString();
-    }
-    
-    private String pegaMes(String numero){
-        switch (numero) {
-            case "01":
-                return "Janeiro";
-            case "02":
-                return "Fevereiro";
-            case "03":
-                return "Marco";
-            case "04":
-                return "Abril";
-            case "05":
-                return "Maio";
-            case "06":
-                return "Junho";
-            case "07":
-                return "Julho";
-            case "08":
-                return "Agosto";
-            case "09":
-                return "Setembro";
-            case "10":
-                return "Outubro";
-            case "11":
-                return "Novembro";
-            case "12":
-                return "Dezembro";
-        }
-        return "";
+        return string.toString();
     }
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        return "Maior ganho";
+        return "MAIOR GANHO: " + relatorioAno.getAcaoMaiorGanhoAno() + " com ganho total de " + df.format(relatorioAno.getValorMaiorGanho());
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        return "Menor ganho";
+        return "MENOR GANHO: " + relatorioAno.getAcaoMenorGanhoAno() + " com movimentação total de " + df.format(relatorioAno.getValorMenorGanho());
     }
     
-    class Empresa {
+   
+    
+    private class EmpresaDoPortfolio {
         
-        private Empresas siglaEmpresa;
-        private Integer qtdAcoes; //quantas acoes da empresa eu tenho
-        private Double valorCompraAcao; //por quanto cada acao foi comprada
-        private Double valorVendaAcoes = 0D;
-        private Integer qtdAcoesVendidas = 0;
-        private Double qtdFeromoniosDeInvestimento; //qtd a ser investida dos 100% na empresa. Na venda é vendido tudo
-        boolean evaporar = false;
-        boolean vendido = false;
-        boolean comprado = false;
-        
-        public Empresa(Empresas siglaEmpresa, Integer qtdAcoes, Double valorCompraAcao, Double qtdFeromoniosDeInvestimento) {
-            this.siglaEmpresa = siglaEmpresa;
-            this.qtdAcoes = qtdAcoes;
-            this.valorCompraAcao = valorCompraAcao;
-            this.qtdFeromoniosDeInvestimento = qtdFeromoniosDeInvestimento;
+        public EmpresaDoPortfolio(SiglaEmpresas siglaEmpresas){
+            this.siglaEmpresa = siglaEmpresas;
         }
         
-        public Empresas getSiglaEmpresa() {
+        private SiglaEmpresas siglaEmpresa;
+        private Integer quantidadeAcoesCompradas = 0;
+        private Integer quantidadeAcoesVendidas = 0;
+        private Double valorCompraAcao = 0D;
+        private Double valorVendaAcao = 0D;
+        private Double quantidadeFeromoniosInvestimento = FEROMONIO_INICIAL_POR_EMPRESA; 
+        private Double carteiraEmpresa = 0D; //Conforme eu vendo ou compro, posso verificar se em relação a anterior foi lucro ou ganho..
+
+        public SiglaEmpresas getSiglaEmpresa() {
             return siglaEmpresa;
         }
 
-        public void setSiglaEmpresa(Empresas siglaEmpresa) {
+        public void setSiglaEmpresa(SiglaEmpresas siglaEmpresa) {
             this.siglaEmpresa = siglaEmpresa;
         }
 
-        public Integer getQtdAcoes() {
-            return qtdAcoes;
+        public Integer getQuantidadeAcoesCompradas() {
+            return quantidadeAcoesCompradas;
         }
 
-        public void setQtdAcoes(Integer qtdAcoes) {
-            this.qtdAcoes = qtdAcoes;
+        public void setQuantidadeAcoesCompradas(Integer quantidadeAcoesCompradas) {
+            this.quantidadeAcoesCompradas = quantidadeAcoesCompradas;
         }
 
-        public Double getQtdFeromoniosDeInvestimento() {
-            return qtdFeromoniosDeInvestimento;
+        public Integer getQuantidadeAcoesVendidas() {
+            return quantidadeAcoesVendidas;
         }
 
-        public void setQtdFeromoniosDeInvestimento(Double qtdFeromoniosDeInvestimento) {
-            this.qtdFeromoniosDeInvestimento = qtdFeromoniosDeInvestimento;
+        public void setQuantidadeAcoesVendidas(Integer quantidadeAcoesVendidas) {
+            this.quantidadeAcoesVendidas = quantidadeAcoesVendidas;
         }
 
         public Double getValorCompraAcao() {
@@ -497,56 +520,41 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
             this.valorCompraAcao = valorCompraAcao;
         }
 
-        public boolean isEvaporar() {
-            return evaporar;
+        public Double getValorVendaAcao() {
+            return valorVendaAcao;
         }
 
-        public void setEvaporar(boolean evaporar) {
-            this.evaporar = evaporar;
+        public void setValorVendaAcao(Double valorVendaAcao) {
+            this.valorVendaAcao = valorVendaAcao;
         }
 
-        public boolean isVendido() {
-            return vendido;
+        public Double getQuantidadeFeromoniosInvestimento() {
+            return quantidadeFeromoniosInvestimento;
         }
 
-        public void setVendido(boolean vendido) {
-            this.vendido = vendido;
+        public void setQuantidadeFeromoniosInvestimento(Double quantidadeFeromoniosInvestimento) {
+            this.quantidadeFeromoniosInvestimento = quantidadeFeromoniosInvestimento;
         }
 
-        public boolean isComprado() {
-            return comprado;
+        public Double getCarteiraEmpresa() {
+            return carteiraEmpresa;
         }
 
-        public void setComprado(boolean comprado) {
-            this.comprado = comprado;
+        public void setCarteiraEmpresa(Double carteiraEmpresa) {
+            this.carteiraEmpresa = carteiraEmpresa;
         }
-
-        public Double getValorVendaAcoes() {
-            return valorVendaAcoes;
-        }
-
-        public void setValorVendaAcoes(Double valorVendaAcoes) {
-            this.valorVendaAcoes = valorVendaAcoes;
-        }
-
-        public Integer getQtdAcoesVendidas() {
-            return qtdAcoesVendidas;
-        }
-
-        public void setQtdAcoesVendidas(Integer qtdAcoesVendidas) {
-            this.qtdAcoesVendidas = qtdAcoesVendidas;
-        }
-        
-        
         
     }
     
-    class Mes {
+    private class RelatorioMes {
+        
         private Double carteiraMes = 0D;
-        private Double maiorLucro = 0D;
-        private Double menorLucro = 0D;
-        private Empresas nomeMaiorLucro;
-        private Empresas nomeMenorLucro;
+        private Double porcGanhoMesComRelacaoCarteiraInicial = 0D;
+        private Double porcGanhoMesComRelacaoCarteiraAnterior = 0D;
+        private SiglaEmpresas acaoMaiorGanhoMes;
+        private SiglaEmpresas acaoMenorGanhoMes;
+        private Double valorMaiorGanho = 0D;
+        private Double valorMenorGanho = 0D;
 
         public Double getCarteiraMes() {
             return carteiraMes;
@@ -556,91 +564,118 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
             this.carteiraMes = carteiraMes;
         }
 
-        public Double getMaiorLucro() {
-            return maiorLucro;
+        public Double getPorcGanhoMesComRelacaoCarteiraInicial() {
+            return porcGanhoMesComRelacaoCarteiraInicial;
         }
 
-        public void setMaiorLucro(Double maiorLucro) {
-            this.maiorLucro = maiorLucro;
+        public void setPorcGanhoMesComRelacaoCarteiraInicial(Double porcGanhoMesComRelacaoCarteiraInicial) {
+            this.porcGanhoMesComRelacaoCarteiraInicial = porcGanhoMesComRelacaoCarteiraInicial;
         }
 
-        public Double getMenorLucro() {
-            return menorLucro;
+        public Double getPorcGanhoMesComRelacaoCarteiraAnterior() {
+            return porcGanhoMesComRelacaoCarteiraAnterior;
         }
 
-        public void setMenorLucro(Double menorLucro) {
-            this.menorLucro = menorLucro;
+        public void setPorcGanhoMesComRelacaoCarteiraAnterior(Double porcGanhoMesComRelacaoCarteiraAnterior) {
+            this.porcGanhoMesComRelacaoCarteiraAnterior = porcGanhoMesComRelacaoCarteiraAnterior;
         }
 
-        public Empresas getNomeMaiorLucro() {
-            return nomeMaiorLucro;
+        public SiglaEmpresas getAcaoMaiorGanhoMes() {
+            return acaoMaiorGanhoMes;
         }
 
-        public void setNomeMaiorLucro(Empresas nomeMaiorLucro) {
-            this.nomeMaiorLucro = nomeMaiorLucro;
+        public void setAcaoMaiorGanhoMes(SiglaEmpresas acaoMaiorGanhoMes) {
+            this.acaoMaiorGanhoMes = acaoMaiorGanhoMes;
         }
 
-        public Empresas getNomeMenorLucro() {
-            return nomeMenorLucro;
+        public SiglaEmpresas getAcaoMenorGanhoMes() {
+            return acaoMenorGanhoMes;
         }
 
-        public void setNomeMenorLucro(Empresas nomeMenorLucro) {
-            this.nomeMenorLucro = nomeMenorLucro;
+        public void setAcaoMenorGanhoMes(SiglaEmpresas acaoMenorGanhoMes) {
+            this.acaoMenorGanhoMes = acaoMenorGanhoMes;
         }
-                
+
+        public Double getValorMaiorGanho() {
+            return valorMaiorGanho;
+        }
+
+        public void setValorMaiorGanho(Double valorMaiorGanho) {
+            this.valorMaiorGanho = valorMaiorGanho;
+        }
+
+        public Double getValorMenorGanho() {
+            return valorMenorGanho;
+        }
+
+        public void setValorMenorGanho(Double valorMenorGanho) {
+            this.valorMenorGanho = valorMenorGanho;
+        }
+        
+        
     }
     
-    class Ano {
-        private Double carteiraAno = 0D;
-        private Double maiorLucro = 0D;
-        private Double menorLucro = 0D;
-        private Empresas nomeMaiorLucro;
-        private Empresas nomeMenorLucro;
-
-        public Double getCarteiraAno() {
-            return carteiraAno;
-        }
-
-        public void setCarteiraAno(Double carteiraAno) {
-            this.carteiraAno = carteiraAno;
-        }
+    private class RelatorioAno {
         
-        public Double getMaiorLucro() {
-            return maiorLucro;
+        private Double carteiraFinal = 0D;
+        private Double porcGanhoAnoComRelacaoCarteiraInicial = 0D;
+        private SiglaEmpresas acaoMaiorGanhoAno;
+        private SiglaEmpresas acaoMenorGanhoAno;
+        private Double valorMaiorGanho = 0D;
+        private Double valorMenorGanho = 0D;
+
+        public Double getCarteiraFinal() {
+            return carteiraFinal;
         }
 
-        public void setMaiorLucro(Double maiorLucro) {
-            this.maiorLucro = maiorLucro;
+        public void setCarteiraFinal(Double carteiraFinal) {
+            this.carteiraFinal = carteiraFinal;
         }
 
-        public Double getMenorLucro() {
-            return menorLucro;
+        public Double getPorcGanhoAnoComRelacaoCarteiraInicial() {
+            return porcGanhoAnoComRelacaoCarteiraInicial;
         }
 
-        public void setMenorLucro(Double menorLucro) {
-            this.menorLucro = menorLucro;
+        public void setPorcGanhoAnoComRelacaoCarteiraInicial(Double porcGanhoAnoComRelacaoCarteiraInicial) {
+            this.porcGanhoAnoComRelacaoCarteiraInicial = porcGanhoAnoComRelacaoCarteiraInicial;
         }
 
-        public Empresas getNomeMaiorLucro() {
-            return nomeMaiorLucro;
+        public SiglaEmpresas getAcaoMaiorGanhoAno() {
+            return acaoMaiorGanhoAno;
         }
 
-        public void setNomeMaiorLucro(Empresas nomeMaiorLucro) {
-            this.nomeMaiorLucro = nomeMaiorLucro;
+        public void setAcaoMaiorGanhoAno(SiglaEmpresas acaoMaiorGanhoAno) {
+            this.acaoMaiorGanhoAno = acaoMaiorGanhoAno;
         }
 
-        public Empresas getNomeMenorLucro() {
-            return nomeMenorLucro;
+        public SiglaEmpresas getAcaoMenorGanhoAno() {
+            return acaoMenorGanhoAno;
         }
 
-        public void setNomeMenorLucro(Empresas nomeMenorLucro) {
-            this.nomeMenorLucro = nomeMenorLucro;
+        public void setAcaoMenorGanhoAno(SiglaEmpresas acaoMenorGanhoAno) {
+            this.acaoMenorGanhoAno = acaoMenorGanhoAno;
+        }
+
+        public Double getValorMaiorGanho() {
+            return valorMaiorGanho;
+        }
+
+        public void setValorMaiorGanho(Double valorMaiorGanho) {
+            this.valorMaiorGanho = valorMaiorGanho;
+        }
+
+        public Double getValorMenorGanho() {
+            return valorMenorGanho;
+        }
+
+        public void setValorMenorGanho(Double valorMenorGanho) {
+            this.valorMenorGanho = valorMenorGanho;
         }
         
         
     }
-     
-    enum Empresas {
+    
+    private enum SiglaEmpresas {
         WEGE3,
         NATU3,
         SBSP3,
@@ -652,5 +687,4 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
         LREN3,
         UGPA3;
     }
-    
 }
