@@ -71,7 +71,7 @@ public class Portfolio {
     }
 
     public String getMelhorAcao() {
-        double melhorAcao = Double.MIN_VALUE;
+        double melhorAcao = -1000000D;
         String retorno = "";
         for (String sigla : this.carteira.keySet()) {
             if (this.carteira.get(sigla).getResultado() > melhorAcao) {

@@ -63,7 +63,7 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
 
     @Override
     public void aplicaEstrategiaBusca() {
-        for (int geracao = 0; geracao < 2; geracao++) {
+        for (int geracao = 0; geracao < 1000; geracao++) {
             if (geracao > 0) {
                 executaCrossovers();
             }
@@ -206,6 +206,7 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
         String mes = dia.split("-")[1];
         if (mesTmp == null) {
             mesTmp = mes;
+            return mesTmp;
         }
         if (!mesTmp.equals(mes)) {
             this.setValorMensal(

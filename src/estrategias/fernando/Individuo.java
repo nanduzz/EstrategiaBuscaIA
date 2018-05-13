@@ -46,6 +46,14 @@ public class Individuo {
         }
     }
 
+    public void geraGenesParaOraculo() {
+
+        //Inicia a quantidade a ser investida por empresas do ENUM
+        for (int i = 0; i < 10; i++) {
+            this.genes[i] = 0.1;
+        }
+    }
+
     public Portfolio getPortfolio() {
         return portfolio;
     }
@@ -119,8 +127,12 @@ public class Individuo {
 //
 
     public void vendeTodasAcoes(HashMap<String, List<Double>> diasPassados) {
-        for (String sigla : diasPassados.keySet()) {
-            portfolio.vendeAcao(sigla, diasPassados.get(sigla).get(diasPassados.size() - 1));
+        try {
+            for (String sigla : diasPassados.keySet()) {
+                portfolio.vendeAcao(sigla, diasPassados.get(sigla).get(diasPassados.size() - 1));
+            }
+        } catch (Exception e) {
+
         }
     }
 
