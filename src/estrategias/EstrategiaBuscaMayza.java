@@ -5,6 +5,9 @@
  */
 package estrategias;
 
+import estrategias.mayza.EmpresaDoPortfolio;
+import estrategias.mayza.RelatorioAno;
+import estrategias.mayza.RelatorioMes;
 import java.text.DecimalFormat;
 import java.time.Month;
 import java.time.format.TextStyle;
@@ -35,7 +38,7 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     private static final Integer PERIODO_RSI = 7;
     private static final Double CARTEIRA_INICIAL = 100000D;
     private static final Double FEROMONIO_INICIAL_POR_EMPRESA = 10D;
-    private static final Double PORCENTAGEM_EVAPORACAO_FEROMONIO = 0.1; //10% da quantidade que ele tem.
+    private static final Double PORCENTAGEM_EVAPORACAO_FEROMONIO = 0.1;
     private static final Double PORCENTAGEM_PERCA_FEROMONIO_PREJUIZO = 0.2;
       
     /*DADOS HISTORICOS*/
@@ -52,8 +55,7 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     private Double feromoniosParaDistribuir = 0D;
     private Double feromoniosEvaporados = 0D;
     private final List<SiglaEmpresas> empresasEvaporadas = new ArrayList<>();
-    private final Map<SiglaEmpresas,Double> empresasReceberFeromonios = new HashMap<>();
-    
+    private final Map<SiglaEmpresas,Double> empresasReceberFeromonios = new HashMap<>();   
     private final Map<SiglaEmpresas,EmpresaDoPortfolio> portfolio = new HashMap<>();
            
     /*RELATÓRIOS*/
@@ -293,12 +295,6 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
         feromoniosParaDistribuir = 0D;
         empresasEvaporadas.clear();
         empresasReceberFeromonios.clear();
-        Double total = 0D;
-//        for(SiglaEmpresas sigla: SiglaEmpresas.values()){
-//            empresa = portfolio.get(sigla);
-//            total = total + empresa.getQuantidadeFeromoniosInvestimento();
-//        }
-//        System.out.println("Total: " + total);
     }
     
     private Boolean atualizaGanhosEmpresaMes(SiglaEmpresas sigla, Double lucroEmpresaDia, Integer diaAtual){
@@ -431,7 +427,6 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
         empresa.setQuantidadeAcoesVendidas(0);
         empresa.setValorCompraAcao(0D);
         empresa.setValorVendaAcao(0D);
-        empresa.setCarteiraEmpresa(0D);
     }
 
     @Override
@@ -471,211 +466,8 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     public String devolveAcaoMaiorPrejuizo() {
         return "MENOR GANHO: " + relatorioAno.getAcaoMenorGanhoAno() + " com movimentação total de " + df.format(relatorioAno.getValorMenorGanho());
     }
-    
-   
-    
-    private class EmpresaDoPortfolio {
-        
-        public EmpresaDoPortfolio(SiglaEmpresas siglaEmpresas){
-            this.siglaEmpresa = siglaEmpresas;
-        }
-        
-        private SiglaEmpresas siglaEmpresa;
-        private Integer quantidadeAcoesCompradas = 0;
-        private Integer quantidadeAcoesVendidas = 0;
-        private Double valorCompraAcao = 0D;
-        private Double valorVendaAcao = 0D;
-        private Double quantidadeFeromoniosInvestimento = FEROMONIO_INICIAL_POR_EMPRESA; 
-        private Double carteiraEmpresa = 0D; //Conforme eu vendo ou compro, posso verificar se em relação a anterior foi lucro ou ganho..
-
-        public SiglaEmpresas getSiglaEmpresa() {
-            return siglaEmpresa;
-        }
-
-        public void setSiglaEmpresa(SiglaEmpresas siglaEmpresa) {
-            this.siglaEmpresa = siglaEmpresa;
-        }
-
-        public Integer getQuantidadeAcoesCompradas() {
-            return quantidadeAcoesCompradas;
-        }
-
-        public void setQuantidadeAcoesCompradas(Integer quantidadeAcoesCompradas) {
-            this.quantidadeAcoesCompradas = quantidadeAcoesCompradas;
-        }
-
-        public Integer getQuantidadeAcoesVendidas() {
-            return quantidadeAcoesVendidas;
-        }
-
-        public void setQuantidadeAcoesVendidas(Integer quantidadeAcoesVendidas) {
-            this.quantidadeAcoesVendidas = quantidadeAcoesVendidas;
-        }
-
-        public Double getValorCompraAcao() {
-            return valorCompraAcao;
-        }
-
-        public void setValorCompraAcao(Double valorCompraAcao) {
-            this.valorCompraAcao = valorCompraAcao;
-        }
-
-        public Double getValorVendaAcao() {
-            return valorVendaAcao;
-        }
-
-        public void setValorVendaAcao(Double valorVendaAcao) {
-            this.valorVendaAcao = valorVendaAcao;
-        }
-
-        public Double getQuantidadeFeromoniosInvestimento() {
-            return quantidadeFeromoniosInvestimento;
-        }
-
-        public void setQuantidadeFeromoniosInvestimento(Double quantidadeFeromoniosInvestimento) {
-            this.quantidadeFeromoniosInvestimento = quantidadeFeromoniosInvestimento;
-        }
-
-        public Double getCarteiraEmpresa() {
-            return carteiraEmpresa;
-        }
-
-        public void setCarteiraEmpresa(Double carteiraEmpresa) {
-            this.carteiraEmpresa = carteiraEmpresa;
-        }
-        
-    }
-    
-    private class RelatorioMes {
-        
-        private Double carteiraMes = 0D;
-        private Double porcGanhoMesComRelacaoCarteiraInicial = 0D;
-        private Double porcGanhoMesComRelacaoCarteiraAnterior = 0D;
-        private SiglaEmpresas acaoMaiorGanhoMes;
-        private SiglaEmpresas acaoMenorGanhoMes;
-        private Double valorMaiorGanho = 0D;
-        private Double valorMenorGanho = 0D;
-
-        public Double getCarteiraMes() {
-            return carteiraMes;
-        }
-
-        public void setCarteiraMes(Double carteiraMes) {
-            this.carteiraMes = carteiraMes;
-        }
-
-        public Double getPorcGanhoMesComRelacaoCarteiraInicial() {
-            return porcGanhoMesComRelacaoCarteiraInicial;
-        }
-
-        public void setPorcGanhoMesComRelacaoCarteiraInicial(Double porcGanhoMesComRelacaoCarteiraInicial) {
-            this.porcGanhoMesComRelacaoCarteiraInicial = porcGanhoMesComRelacaoCarteiraInicial;
-        }
-
-        public Double getPorcGanhoMesComRelacaoCarteiraAnterior() {
-            return porcGanhoMesComRelacaoCarteiraAnterior;
-        }
-
-        public void setPorcGanhoMesComRelacaoCarteiraAnterior(Double porcGanhoMesComRelacaoCarteiraAnterior) {
-            this.porcGanhoMesComRelacaoCarteiraAnterior = porcGanhoMesComRelacaoCarteiraAnterior;
-        }
-
-        public SiglaEmpresas getAcaoMaiorGanhoMes() {
-            return acaoMaiorGanhoMes;
-        }
-
-        public void setAcaoMaiorGanhoMes(SiglaEmpresas acaoMaiorGanhoMes) {
-            this.acaoMaiorGanhoMes = acaoMaiorGanhoMes;
-        }
-
-        public SiglaEmpresas getAcaoMenorGanhoMes() {
-            return acaoMenorGanhoMes;
-        }
-
-        public void setAcaoMenorGanhoMes(SiglaEmpresas acaoMenorGanhoMes) {
-            this.acaoMenorGanhoMes = acaoMenorGanhoMes;
-        }
-
-        public Double getValorMaiorGanho() {
-            return valorMaiorGanho;
-        }
-
-        public void setValorMaiorGanho(Double valorMaiorGanho) {
-            this.valorMaiorGanho = valorMaiorGanho;
-        }
-
-        public Double getValorMenorGanho() {
-            return valorMenorGanho;
-        }
-
-        public void setValorMenorGanho(Double valorMenorGanho) {
-            this.valorMenorGanho = valorMenorGanho;
-        }
-        
-        
-    }
-    
-    private class RelatorioAno {
-        
-        private Double carteiraFinal = 0D;
-        private Double porcGanhoAnoComRelacaoCarteiraInicial = 0D;
-        private SiglaEmpresas acaoMaiorGanhoAno;
-        private SiglaEmpresas acaoMenorGanhoAno;
-        private Double valorMaiorGanho = 0D;
-        private Double valorMenorGanho = 0D;
-
-        public Double getCarteiraFinal() {
-            return carteiraFinal;
-        }
-
-        public void setCarteiraFinal(Double carteiraFinal) {
-            this.carteiraFinal = carteiraFinal;
-        }
-
-        public Double getPorcGanhoAnoComRelacaoCarteiraInicial() {
-            return porcGanhoAnoComRelacaoCarteiraInicial;
-        }
-
-        public void setPorcGanhoAnoComRelacaoCarteiraInicial(Double porcGanhoAnoComRelacaoCarteiraInicial) {
-            this.porcGanhoAnoComRelacaoCarteiraInicial = porcGanhoAnoComRelacaoCarteiraInicial;
-        }
-
-        public SiglaEmpresas getAcaoMaiorGanhoAno() {
-            return acaoMaiorGanhoAno;
-        }
-
-        public void setAcaoMaiorGanhoAno(SiglaEmpresas acaoMaiorGanhoAno) {
-            this.acaoMaiorGanhoAno = acaoMaiorGanhoAno;
-        }
-
-        public SiglaEmpresas getAcaoMenorGanhoAno() {
-            return acaoMenorGanhoAno;
-        }
-
-        public void setAcaoMenorGanhoAno(SiglaEmpresas acaoMenorGanhoAno) {
-            this.acaoMenorGanhoAno = acaoMenorGanhoAno;
-        }
-
-        public Double getValorMaiorGanho() {
-            return valorMaiorGanho;
-        }
-
-        public void setValorMaiorGanho(Double valorMaiorGanho) {
-            this.valorMaiorGanho = valorMaiorGanho;
-        }
-
-        public Double getValorMenorGanho() {
-            return valorMenorGanho;
-        }
-
-        public void setValorMenorGanho(Double valorMenorGanho) {
-            this.valorMenorGanho = valorMenorGanho;
-        }
-        
-        
-    }
-    
-    private enum SiglaEmpresas {
+  
+    public enum SiglaEmpresas {
         WEGE3,
         NATU3,
         SBSP3,
