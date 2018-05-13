@@ -219,14 +219,14 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     }
 
     private double calculaExpectativaVenda() {
-        //decrescente
-        double expectativaCompra = 1 - (0.5 * (diasRestantes / (float) DIAS_2016));
-        //return expectativaCompra < 0.85 ? expectativaCompra : 0.85;
+        //crescente com o tempo
+        double expectativaVenda = 1 - (0.5 * (diasRestantes / (float) DIAS_2016));
+        //return expectativaVenda < 0.85 ? expectativaVenda : 0.85;
         return 0.5;
     }
 
     private double calculaPorcentagemMaxima() {
-        //crescente
+        //crescente com o tempo
         double porcentagemMaxima = 1 - 0.6 * (diasRestantes / (float) DIAS_2016);
         //return porcentagemMaxima < 0.95 ? porcentagemMaxima : 1;
         return 1;
