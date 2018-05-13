@@ -5,21 +5,18 @@
  */
 package estrategias;
 
+import estrategias.fernando.Individuo;
+import estrategias.fernando.Portfolio;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 import modelo.Dia;
 import util.indicadores.RSI;
 
 /**
- *
- *
- * FALTA ELITISMO RODAR AS GERAÇÕeS MUTAÇÔES MELHROAR A QUANTIDADE DE GENES ----
- * % de investimento por empresa podem ser 10 genes
  *
  * @author fernando
  */
@@ -31,7 +28,15 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
     LinkedHashSet<String> diasTreino = new LinkedHashSet<>();
     LinkedHashSet<String> diasTeste = new LinkedHashSet<>();
 
-    List<MembroPopulacao> populacao = new ArrayList<>();
+    List<Individuo> populacao = new ArrayList<>();
+    private final int NRO_MUTACOES = 20;
+    private final String resultadoMes[] = new String[12];
+
+    private String valorPortfolio = "";
+    private String melhorAcao;
+    private String piorAcao;
+
+    private static final DecimalFormat DF = new DecimalFormat("#.##");
 
     @Override
     public void recebeDadosTreino(List<Dia> periodo) {
@@ -58,236 +63,174 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
 
     @Override
     public void aplicaEstrategiaBusca() {
-        for (int i = 0; i < 10000; i++) {
-            MembroPopulacao membroPopulacao = new MembroPopulacao();
-            membroPopulacao.geraGenesAleatorios();
-
-            this.realizaNegociacoes(membroPopulacao, this.diasTreino, this.empresaDiasTreino);
-            this.populacao.add(membroPopulacao);
-        }
-
-        Collections.sort(populacao, (MembroPopulacao membro1, MembroPopulacao membro2) -> {
-            if (membro1.getValorCaixaFinal() <= membro2.getValorCaixaFinal()) {
-                return 1; //To change body of generated lambdas, choose Tools | Templates.
-            } else {
-                return -1;
+        for (int geracao = 0; geracao < 2; geracao++) {
+            if (geracao > 0) {
+                executaCrossovers();
             }
-        });
-
-        int i = 0;
-        for (MembroPopulacao m : populacao) {
-            System.out.println(m.getValorCaixaFinal());
-            if (i > 5) {
-                break;
+            for (int i = 0; i < 1000; i++) {
+                executaPopulacaoNormal();
             }
-            i++;
+            ordenaPorFitness();
+            this.populacao.subList(1000, this.populacao.size()).clear();
+
         }
-
-        this.realizaNegociacoes(this.populacao.get(0), diasTeste, empresaDiasTeste);
-        System.out.println("FINAAL");
-        System.out.println(this.populacao.get(0).getValorCaixaFinal());
-
+        this.realizaTeste();
     }
 
-    private void realizaNegociacoes(MembroPopulacao membroPopulacao, LinkedHashSet<String> dias, HashMap<String, List<Dia>> dadosDias) {
-        Portifolio portifolio = new Portifolio();
+    private void executaPopulacaoNormal() {
+        Individuo individuo = new Individuo();
+        individuo.geraGenesAleatorios();
+
+        this.realizaNegociacoes(individuo, this.diasTreino, this.empresaDiasTreino, false);
+        this.populacao.add(individuo);
+    }
+
+    private void executaCrossovers() {
+        for (int mutacao = 0; mutacao < NRO_MUTACOES; mutacao++) {
+            Individuo membroMutado = Individuo.crossOver(Individuo.selecionaParaCrossOver(populacao),
+                    Individuo.selecionaParaCrossOver(populacao)
+            );
+            this.realizaNegociacoes(membroMutado, diasTreino, empresaDiasTreino, false);
+            this.populacao.add(membroMutado);
+        }
+    }
+
+    private void ordenaPorFitness() {
+        try {
+            Collections.sort(populacao, (Individuo membro1, Individuo membro2) -> {
+                if (!(membro1 instanceof Individuo) || !(membro2 instanceof Individuo)) {
+                    return -1;
+                }
+                if (membro1.getValorCaixaFinal() <= membro2.getValorCaixaFinal()) {
+                    return 1;
+                } else {
+                    return -1;
+                }
+            });
+        } catch (Exception e) {
+        }
+    }
+
+    private void realizaNegociacoes(Individuo membroPopulacao, LinkedHashSet<String> dias, HashMap<String, List<Dia>> dadosDias, boolean executandoFinal) {
         this.diasPassados = new HashMap<>();
+        String mesTmp = null;
         for (String dia : dias) {
-            for (Dia diaEmpresa : dadosDias.get(dia)) {
+            if (executandoFinal) {
+                mesTmp = this.realizaCalculoMesAMes(mesTmp, dia, diasPassados);
+            }
+            dadosDias.get(dia).forEach((Dia diaEmpresa) -> {
                 String sigla = diaEmpresa.getSigla();
                 if (!diasPassados.containsKey(sigla)) {
                     diasPassados.put(sigla, new ArrayList<>());
                 }
-
-//                double roc = new ROC(this.diasPassados.get(diaEmpresa.getSigla()), 5).calcula();
                 double rsi = new RSI(this.diasPassados.get(sigla), (int) membroPopulacao.getPeriodoCalculoRSI()).calcula();
 
-                if (rsi > 0 && rsi < membroPopulacao.getRSIMin() && !portifolio.possuiAcao(sigla)) {
+                if (membroPopulacao.deveComprarAcao(rsi, sigla)) {
+                    membroPopulacao.compraAcoes(sigla, this.getUltimoValorFechamento(sigla));
+                } else if (membroPopulacao.deveVenderAcao(rsi, sigla, this.getUltimoValorFechamento(sigla))) {
 
-                    double quantidadeAcoes = (membroPopulacao.getPorcentagemInvestimento(sigla) * portifolio.getValorEmCaixa()) / this.getUltimoValorFechamento(sigla);
-                    int quantidadeCompra = (int) Math.floor(quantidadeAcoes);
-                    portifolio.compraAcao(sigla, quantidadeCompra, this.getUltimoValorFechamento(sigla));
-                } else if (rsi > membroPopulacao.getRSIMax() && portifolio.possuiAcao(sigla)) {
-                    portifolio.vendeAcao(sigla, this.getUltimoValorFechamento(sigla));
+                    membroPopulacao.vendeAcao(sigla, this.getUltimoValorFechamento(sigla));
                 }
-
                 diasPassados.get(sigla).add(diaEmpresa.getValorFechamento());
-            }
-        }
+            });
 
-        
-        //vende todas as ações para calcular valor em caixa
-        for (String sigla : this.diasPassados.keySet()) {
-            portifolio.vendeAcao(sigla, this.diasPassados.get(sigla).get(this.diasPassados.size() - 1));
         }
-        membroPopulacao.setValorFinal(portifolio.valorEmCaixa);
+        membroPopulacao.vendeTodasAcoes(this.diasPassados);
+    }
+
+    private static void printaCompra(String sigla, int quantidade, double valor) {
+        System.out.println("-------------");
+        System.out.println("Comprando: " + sigla + "\t quantidade :" + quantidade + "  \t valor" + valor);
+        System.out.println("-------------");
+    }
+
+    private static void printaVenda(String sigla, int quantidade, double valor) {
+        System.out.println("-------------");
+        System.out.println("Vendendo: " + sigla + "\t quantidade :" + quantidade + "  \t valor" + valor);
+        System.out.println("-------------");
     }
 
     @Override
     public String devolveValorPortfolio() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return this.valorPortfolio;
     }
 
     @Override
     public String devolveResultadosMesAMes() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        String resultadoMesAMes = "";
+        for (int i = 0; i < this.resultadoMes.length - 1; i++) {
+            resultadoMesAMes += "------------------------------------------------------\n";
+            resultadoMesAMes += "Mês " + (i + 1) + ": " + this.resultadoMes[i] + "\n";
+        }
+        resultadoMesAMes += "------------------------------------------------------\n";
+        resultadoMesAMes += "Mês 12: " + this.valorPortfolio + "\n";
+
+        return resultadoMesAMes;
     }
 
     @Override
     public String devolveAcaoMaiorGanho() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return this.melhorAcao;
     }
 
     @Override
     public String devolveAcaoMaiorPrejuizo() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return this.piorAcao;
     }
 
     public double getUltimoValorFechamento(String sigla) {
-        return this.diasPassados.get(sigla).get(this.diasPassados.get(sigla).size() - 1);
+        if (this.diasPassados.containsKey(sigla) && this.diasPassados.get(sigla).size() > 0) {
+            return this.diasPassados.get(sigla).get(this.diasPassados.get(sigla).size() - 1);
+        }
+        return 0;
     }
 
-    class Portifolio {
-
-        private final HashMap<String, AcaoPossuida> carteira = new HashMap<>();
-        private double valorEmCaixa = 100000D;
-
-        public void iniciaEmpresa(String sigla) {
-            this.carteira.put(sigla, new AcaoPossuida());
-        }
-
-        public void compraAcao(String sigla, int quantidadeComprada, double valor) {
-            if (!this.carteira.containsKey(sigla)) {
-                this.iniciaEmpresa(sigla);
-            }
-            double valorNegociacao = quantidadeComprada * valor;
-            if (this.valorEmCaixa - valorNegociacao < 0) {
-                return;
-            }
-            this.valorEmCaixa -= valorNegociacao;
-            this.carteira.get(sigla).realizaCompra(quantidadeComprada, valor);
-        }
-
-        public boolean possuiAcao(String sigla) {
-            return this.carteira.containsKey(sigla) && this.carteira.get(sigla).getQuantidade() > 0;
-        }
-
-        public void vendeAcao(String sigla, double valor) {
-            if (!this.possuiAcao(sigla)) {
-                return;
-            }
-            int quantidadePossuida = this.carteira.get(sigla).quantidade;
-            this.valorEmCaixa += quantidadePossuida * valor;
-            this.carteira.get(sigla).realizaVenda();
-        }
-
-        public double getValorEmCaixa() {
-            return valorEmCaixa;
-        }
-
-        class AcaoPossuida {
-
-            private int quantidade;
-            private double valorCompra;
-
-            public AcaoPossuida() {
-                this.quantidade = 0;
-                this.valorCompra = 0;
-            }
-
-            public void realizaCompra(int quantidade, double valor) {
-                this.quantidade = quantidade;
-                this.valorCompra = valor;
-            }
-
-            public void realizaVenda() {
-                this.quantidade = 0;
-                this.valorCompra = 0;
-            }
-
-            public int getQuantidade() {
-                return quantidade;
-            }
-
-            public void setQuantidade(int quantidade) {
-                this.quantidade = quantidade;
-            }
-
-            public double getValorCompra() {
-                return valorCompra;
-            }
-
-            public void setValorCompra(double valorCompra) {
-                this.valorCompra = valorCompra;
-            }
-
-        }
-
+    private void setValorPortfolio(double valor) {
+        this.valorPortfolio = DF.format(valor);
     }
 
-    class MembroPopulacao {
-
-        private static final int I_RSI_MIN = 10;
-        private static final int I_RSI_MAX = 11;
-        private static final int I_PERIODO_RSI = 12;
-
-        private double[] genes = new double[13];
-
-        private double valorCaixaFinal = 0;
-
-        public void geraGenesAleatorios() {
-            Random rand = new Random();
-            this.genes[I_RSI_MAX] = rand.nextInt(100);
-            this.genes[I_RSI_MIN] = rand.nextInt(100);
-            if (this.genes[I_RSI_MAX] <= this.genes[I_RSI_MIN]) {
-                this.geraGenesAleatorios();
-            }
-            this.genes[I_PERIODO_RSI] = ThreadLocalRandom.current().nextInt(2, 20 + 1);
-
-            //Inicia a quantidade a ser investida por empresas do ENUM
-            for (int i = 0; i < 10; i++) {
-                this.genes[i] = rand.nextDouble() / 10;
-            }
-
-        }
-
-        public double getRSIMin() {
-            return this.genes[I_RSI_MIN];
-        }
-
-        public double getRSIMax() {
-            return this.genes[I_RSI_MAX];
-        }
-
-        public double getPeriodoCalculoRSI() {
-            return this.genes[I_PERIODO_RSI];
-        }
-
-        public double getPorcentagemInvestimento(String sigla) {
-            return this.genes[Empresas.valueOf(sigla).ordinal()];
-        }
-
-        private void setValorFinal(double valorEmCaixa) {
-            this.valorCaixaFinal = valorEmCaixa;
-        }
-
-        public double getValorCaixaFinal() {
-            return valorCaixaFinal;
-        }
-
+    private void setValorMensal(int mes, String valor) {
+        int mMes = mes - 1;
+        this.resultadoMes[mMes] = valor;
     }
 
-    enum Empresas {
-        WEGE3,
-        NATU3,
-        SBSP3,
-        CIEL3,
-        CSNA3,
-        VIVT3,
-        GRND3,
-        JSLG3,
-        LREN3,
-        UGPA3;
+    private void setMelhorAcao(String melhorAcao) {
+        this.melhorAcao = melhorAcao;
+    }
+
+    private void setPiorAcao(String piorAcao) {
+        this.piorAcao = piorAcao;
+    }
+
+    private String realizaCalculoMesAMes(String mesTmp, String dia, HashMap<String, List<Double>> diasPassados) {
+        String mes = dia.split("-")[1];
+        if (mesTmp == null) {
+            mesTmp = mes;
+        }
+        if (!mesTmp.equals(mes)) {
+            this.setValorMensal(
+                    Integer.valueOf(mesTmp),
+                    DF.format(this.populacao.get(0).calculaDadosMensal(mesTmp, diasPassados))
+            );
+            mesTmp = mes;
+        }
+
+        return mesTmp;
+    }
+
+    private Individuo melhorDaPopulacao() {
+        return this.populacao.get(0);
+    }
+
+    private void realizaTeste() {
+        Individuo melhorIndividuo = this.melhorDaPopulacao();
+        melhorIndividuo.setPortfolio(new Portfolio());
+
+        this.realizaNegociacoes(melhorIndividuo, diasTeste, empresaDiasTeste, true);
+
+        this.setValorPortfolio(melhorIndividuo.getValorCaixaFinal());
+        this.setMelhorAcao(melhorIndividuo.getPortfolio().getMelhorAcao());
+        this.setPiorAcao(melhorIndividuo.getPortfolio().getPiorAcao());
     }
 
 }

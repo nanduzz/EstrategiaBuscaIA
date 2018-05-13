@@ -1,6 +1,7 @@
 package principal;
 
 import estrategias.EstrategiaBusca;
+import estrategias.EstrategiaBuscaMayza;
 import estrategias.EstrategiaBuscaVinicius;
 import java.io.File;
 import java.util.List;
@@ -27,6 +28,7 @@ public class Principal {
                 new File("COTAHIST_A2016.TXT"));
 
         EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaVinicius();
+        //EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaMayza();
         estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
         estrategiaBuscaIA.recebeDadosTeste(periodo2016);
         estrategiaBuscaIA.aplicaEstrategiaBusca();
