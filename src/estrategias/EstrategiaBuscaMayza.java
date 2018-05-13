@@ -432,6 +432,7 @@ public class EstrategiaBuscaMayza implements EstrategiaBusca {
     @Override
     public String devolveValorPortfolio() {
         StringBuilder string = new StringBuilder();
+        string.append("Estrategia de Mayza da Costa\n");
         string.append("x-----------------x\n");
         string.append("| RESULTADO FINAL |\n");
         string.append("x-----------------x\n\n");

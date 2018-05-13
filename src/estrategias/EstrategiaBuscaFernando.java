@@ -152,7 +152,7 @@ public class EstrategiaBuscaFernando implements EstrategiaBusca {
 
     @Override
     public String devolveValorPortfolio() {
-        return this.valorPortfolio;
+        return "Estrategia de Fernando Carvalho\n" + this.valorPortfolio;
     }
 
     @Override

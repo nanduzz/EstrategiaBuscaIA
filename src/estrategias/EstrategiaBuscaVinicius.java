@@ -81,7 +81,7 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
 
     @Override
     public String devolveValorPortfolio() {
-        return String.valueOf("\nCarteira obteve "
+        return String.valueOf("Estrategia de Vinicius Camargo\nCarteira obteve "
                 + Math.floor(((carteira / CARTEIRA_INICIAL) * 100) * 100) / 100
                 + "% do valor investido.\n");
     }

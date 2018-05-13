@@ -39,6 +39,7 @@ public class Principal {
             System.out.println(estrategiaBuscaIA.devolveResultadosMesAMes());
             System.out.println(estrategiaBuscaIA.devolveAcaoMaiorGanho());
             System.out.println(estrategiaBuscaIA.devolveAcaoMaiorPrejuizo());
+            System.out.println("\n\n");
         }
 
     }
