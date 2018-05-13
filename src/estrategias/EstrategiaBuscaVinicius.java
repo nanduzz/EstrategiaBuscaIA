@@ -33,11 +33,10 @@ public class EstrategiaBuscaVinicius implements EstrategiaBusca {
     private Double carteira = CARTEIRA_INICIAL;
 
     //parametros do problema
-    private final int PESO_TREINO = 1;//20% //10%/90% chega dar resultados melhores
+    private final int PESO_TREINO = 1;//20%
     private final int PESO_TESTE = 4;//80%
     private final int SOMA_PESOS = PESO_TESTE + PESO_TREINO;
     private static final int ULTIMO_DIA_MES = 29;
-    private double EXPECTATIVA_DE_ALTA_PARA_VENDER = 0.5;
 
     //variaveis que controlam ciclo de execucao
     private final Locale BRAZIL = new Locale("pt", "BR");
