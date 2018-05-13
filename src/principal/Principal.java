@@ -1,9 +1,11 @@
 package principal;
 
 import estrategias.EstrategiaBusca;
+import estrategias.EstrategiaBuscaFernando;
 import estrategias.EstrategiaBuscaMayza;
 import estrategias.EstrategiaBuscaVinicius;
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 import modelo.Dia;
 import util.CarregaDados;
@@ -27,16 +29,18 @@ public class Principal {
         List<Dia> periodo2016 = CarregaDados.carregaDados(
                 new File("COTAHIST_A2016.TXT"));
 
-        EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaVinicius();
-        //EstrategiaBusca estrategiaBuscaIA = new EstrategiaBuscaMayza();
-        estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
-        estrategiaBuscaIA.recebeDadosTeste(periodo2016);
-        estrategiaBuscaIA.aplicaEstrategiaBusca();
+        List<EstrategiaBusca> estrategias = Arrays.asList(new EstrategiaBuscaMayza(), new EstrategiaBuscaVinicius(), new EstrategiaBuscaFernando());
+        for (EstrategiaBusca estrategiaBuscaIA : estrategias) {
+            estrategiaBuscaIA.recebeDadosTreino(periodo2014e2015);
+            estrategiaBuscaIA.recebeDadosTeste(periodo2016);
+            estrategiaBuscaIA.aplicaEstrategiaBusca();
 
-        System.out.println(estrategiaBuscaIA.devolveValorPortfolio());
-        System.out.println(estrategiaBuscaIA.devolveResultadosMesAMes());
-        System.out.println(estrategiaBuscaIA.devolveAcaoMaiorGanho());
-        System.out.println(estrategiaBuscaIA.devolveAcaoMaiorPrejuizo());
+            System.out.println(estrategiaBuscaIA.devolveValorPortfolio());
+            System.out.println(estrategiaBuscaIA.devolveResultadosMesAMes());
+            System.out.println(estrategiaBuscaIA.devolveAcaoMaiorGanho());
+            System.out.println(estrategiaBuscaIA.devolveAcaoMaiorPrejuizo());
+        }
+
     }
 
 }
